@@ -1,38 +1,159 @@
 #include <stdio.h>
 #include <stdlib.h>
-
+#include <stdarg.h>
+#include <stdbool.h>
+#include <unistd.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <unistd.h>
 #include <dirent.h>
+#include <ctype.h>
 
-#define WORD_SIZE 80
+#define WORD_LENGTH 80
 #define INITIAL_SIZE 32
 
 // Variable declarations
 typedef struct alphanumeric
 {
     unsigned int count;
-    char word[WORD_SIZE];
+    char word[WORD_LENGTH];
 
 } alnum_t;
 
 unsigned int word_count = 0;
-unsigned int space_avail = INITIAL_SIZE;
+unsigned int space_available = INITIAL_SIZE;
+const unsigned int DICT_ENTRY_SIZE = sizeof(unsigned int) + WORD_LENGTH;
+
+
+// INCREASE DICTIONARY_SIZE ==============================================================
+/* The dictionary has run out of space. Double the size of allocated memory.            */
+alnum_t* increase_dictionary_size(alnum_t* dictionary){
+
+    printf("Attempting reallocation...\n");
+
+    space_available *= 2;
+    dictionary = (alnum_t*)realloc( dictionary, space_available * DICT_ENTRY_SIZE );
+    if (dictionary == NULL){
+        fprintf(stderr, "realloc failed()");
+    }
+    printf("Re-allocated struct array to be size %d.\n", space_available);
+
+    return dictionary;
+}
+
+
+
+// VERIFY ALPHANUMERIC ===================================================================
+/* Verifies whether a word read by fscanf is alphanumeric in order to add to the
+    dictionary. If it is not, searches for punctuation to possibly separate into two
+    separate words.                                                                     */
+
+void verify_alphanumeric(alnum_t* dictionary, char* new_word){
+    //printf("Verifying if word is alphanumeric\n");
+
+    int i = 0;
+    bool valid = true;
+    while(new_word[i] != '\0'){
+        if(isalnum(new_word[i])) {
+            i++;
+        } else {
+            printf("Character %c is not alnum\n", new_word[i]);
+            valid = false;
+            break;
+        }
+    }
+
+    if (valid){  // add the word to the dictionary
+        printf("Adding %s\n", new_word);
+        strcpy(dictionary[word_count].word, new_word);
+        dictionary[word_count].count = 1;
+        word_count++;
+        //return;
+    }
+
+    // Perform other checks such as for contractions
+
+
+
+
+
+}
+
+
+// LINEAR SEARCH =========================================================================
+/* Perform a linear search of the dictionary struct for the presence of the candidate
+    word. Return index of word instance.                                                */
+unsigned int lin_search(alnum_t* dictionary, char* new_word){
+    //printf("Attempting to find word in dictionary\n");
+    for (int i = 0; i < word_count; i++){
+        if (strcmp(new_word, dictionary[i].word) == 0){
+            printf("%s equivalent to word at index %d\n", new_word, i);
+            return i;
+        }
+    }
+
+    return word_count;
+}
+
+
+
+// READ FILE CONTENTS ====================================================================
+/* Opens the file and reads all alphanumeric words */
+alnum_t* read_file_contents(char* full_path, alnum_t* dictionary){
+    printf("Found regular file. Attempting to read...\n");
+
+    FILE* file = fopen(full_path, "r");
+    if (file == NULL){
+        perror ("fopen() failed");
+        exit(EXIT_FAILURE);
+    }
+
+    char new_word[WORD_LENGTH];
+    int index;
+    // read a word, check if it is in the dictionary,
+    // add word / increase word count accordingly
+    while ((fscanf(file, "%s", new_word)) != EOF){
+
+        if (word_count == space_available-1){
+            dictionary = increase_dictionary_size(dictionary);
+        }
+        printf("%d %d\n", word_count, space_available);
+
+        index = lin_search(dictionary, new_word);
+        //printf("Lin_search returned index %d\n", index);
+        //printf("the current word_count is %d\n", word_count);
+
+        if (index < word_count){        // the word was already in the dictionary
+            //printf("Word already found in dictionary...\n");
+            dictionary[index].count++;
+        } else {
+            verify_alphanumeric(dictionary, new_word);
+        }
+    }
+
+    fclose(file);
+
+    // may be a different pointer than was sent if reallocation occurred
+    return dictionary;
+}
+
+
 
 // READ DIRECTORY CONTENTS ===============================================================
-void read_directory_contents(DIR* directory, alnum_t* dictionary, char* filepath) {
-    struct dirent* dir_pt;
+/* Loops through the specified directory checking for regular files. Any regular files
+    are passed to read_file_contents() to be read.                                      */
+alnum_t* read_directory_contents(DIR* directory, alnum_t* dictionary, char* file_path) {
+
+    struct dirent* file;
     struct stat filedata;
-    char full_path[NAME_MAX];
+    char full_path[NAME_MAX];   // NAME_MAX: macro for maximum file path length, typically 1 byte
 
-    while ((dir_pt = readdir(directory)) != NULL){
-        printf("The current file is: %s\n", dir_pt->d_name);
-        sprintf(full_path, "%s/%s", filepath, dir_pt->d_name);
+    while ((file = readdir(directory)) != NULL){
+        printf("\nThe current file is: %s\n", file->d_name);
+        sprintf(full_path, "%s/%s", file_path, file->d_name);
 
-
-        int st_err = lstat(full_path, &filedata);     // get file data for current file pointed to by dir_pt
+        // get file data for current file
+        int st_err = lstat(full_path, &filedata);
         if (st_err == -1) {
                 perror("Failed to read file data");
                 exit(EXIT_FAILURE);
@@ -40,26 +161,33 @@ void read_directory_contents(DIR* directory, alnum_t* dictionary, char* filepath
 
         // check if the current file is a regular file
         if (S_ISREG(filedata.st_mode)){
-            printf("Is regular file\n");
-            printf("File size: %ld\n", filedata.st_size);
+            dictionary = read_file_contents(full_path, dictionary);
 
-            //read_file_contents(dictionary);
-
-
-        } else {
+        } else {    // ignore if it is not a regular file
             printf("  Not a regular file\n\n");
             continue;
         }
     }
 
     closedir(directory);
+
+    // may be a different pointer than was sent if reallocation occurred
+    return dictionary;
+}
+
+
+// SUMMARY ===============================================================================
+void summary(alnum_t* dictionary){
+
+
+
+
+
 }
 
 
 
-
-
-// MAIN =================================================================================
+// MAIN ==================================================================================
 int main(int argc, char** argv){
     // Ensure proper usage
     if (argc < 2){
@@ -68,7 +196,7 @@ int main(int argc, char** argv){
     }
 
     // Dictionary of word counts
-    alnum_t* dictionary = malloc(INITIAL_SIZE * (sizeof(unsigned int) + WORD_SIZE));
+    alnum_t* dictionary = malloc(INITIAL_SIZE * DICT_ENTRY_SIZE);
     if ( dictionary == NULL )
     {
         fprintf( stderr, "malloc() failed\n" );
@@ -78,16 +206,18 @@ int main(int argc, char** argv){
     printf("Allocated initial struct array of size %d.\n", INITIAL_SIZE);
 
     // Attempt to open the specified directory
-    char* filepath = argv[1];
-    printf("Current Working Directory: %s\n\n", filepath);
-    DIR* directory = opendir(filepath);
+    char* file_path = argv[1];
+    printf("Current Working Directory: %s\n\n", file_path);
+    DIR* directory = opendir(file_path);
 
     if (directory == NULL){
         perror("Cannot open directory");
         return EXIT_FAILURE;
     }
 
-    read_directory_contents(directory, dictionary, filepath);
+    dictionary = read_directory_contents(directory, dictionary, file_path);
+
+    summary(dictionary);
 
     free(dictionary);
     dictionary = NULL;
