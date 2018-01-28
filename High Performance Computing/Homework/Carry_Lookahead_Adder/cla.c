@@ -364,9 +364,8 @@ void top_level_carry(int* p, int* g, int* carry_in, int size, int block){
     carry_in[0] = g[0];
 
     for (int i = 1; i < size/block; i++){
-        carry_in[i] = g[i]  ||  (p[i] && carry_in[i-1]);
+        carry_in[i] = g[i-1]  ||  (p[i-1] && carry_in[i-1]);
     }
-
 }
 
 // LOWER LEVEL CARRY =============================================================
