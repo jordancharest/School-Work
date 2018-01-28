@@ -136,67 +136,125 @@ void add_bits(int* binary_array, int index, int dig1, int dig2, int dig3, int di
 void print_binary_array(int* array, int size){
 
     for (int i = size-1; i >= 0; i--){
+        if ((i+1)%4 == 0)   printf(" ");
         printf("%d", array[i]);
     }
 }
 
-
-
 // CARRY LOOKAHEAD ADDER ==========================================================
 void carry_lookahead_adder(int* A, int* B, int c_in){
-// Divide into 4 groups, calculate propagate and generate for each group
+    // Divide into 4 groups, calculate propagate and generate for each group
     int block = 1;
     int propagate[BITS] = {0};
     int generate[BITS] = {0};
     bit_level_p_and_g(propagate, generate, A, B, BITS);
 
 
-    // need to be changed if block size changes
+    // GROUP
     int group_propagate[BITS/4] = {0};
     int group_generate[BITS/4] = {0};
-
-    // Divide into 4 groups again, calculate propagate and generate for each group
     block *= 4;
     next_level_P_and_G(group_propagate, group_generate, propagate, generate, BITS, block);
 
 
-    // need to be changed if block size changes
+    // SECTION
     int section_propagate[BITS/16] = {0};
     int section_generate[BITS/16] = {0};
-
-    // Again
     block *= 4;
     next_level_P_and_G(section_propagate, section_generate, group_propagate, group_generate, BITS, block);
 
 
-    // Now head back down to bit level, calculating the carry-in along the way
-    int carry_in16[BITS/16] = {0};      // change if block size changes; should be same size as section_propagate
-    top_level_carry(section_propagate, section_generate, carry_in16, BITS, block);
+    // SUPER SECTION
+    int super_section_propagate[BITS/64] = {0};
+    int super_section_generate[BITS/64] = {0};
+    block *= 4;
+    next_level_P_and_G(super_section_propagate, super_section_generate, section_propagate, section_generate, BITS, block);
 
-    int carry_in4[BITS/4] = {0};      // change if block size changes; should be same size as group_propagate
-    lower_level_carry(group_propagate, group_generate, carry_in4, carry_in16, BITS, block);
+
+    // SUPER SECTION: head back down to bit level, calculating the carry-in along the way
+    int super_section_carry[BITS/64] = {0};
+    top_level_carry(super_section_propagate, super_section_generate, super_section_carry, BITS, block);
 
 
+    // SECTION
+    int section_carry[BITS/16] = {0};
+    lower_level_carry(section_propagate, section_generate, section_carry, super_section_carry, BITS, block);
     block /= 4;
+
+
+    // GROUP
+    int group_carry[BITS/4] = {0};      // change if block size changes; should be same size as group_propagate
+    lower_level_carry(group_propagate, group_generate, group_carry, section_carry, BITS, block);
+    block /= 4;
+
+
+    // BIT LEVEL
     int carry_in[BITS] = {0};
-
-    lower_level_carry(propagate, generate, carry_in, carry_in4, BITS, block);
-
+    lower_level_carry(propagate, generate, carry_in, group_carry, BITS, block);
 
 
+    // CALCULATE RESULT
     int result[BITS] = {0};
     sum(result, A, B, carry_in, c_in, BITS);
 
+
+
+#ifdef DEBUG_MODE
+    printf("\nBIT Level");
+    printf("\nPropagate: ");
+    print_binary_array(propagate, BITS);
+    printf("\nGenerate:  ");
+    print_binary_array(generate, BITS);
+    printf("\nCarry:     ");
+    print_binary_array(carry_in, BITS);
+
+    printf("\n\nGROUP Level");
+    printf("\nPropagate: ");
+    print_binary_array(group_propagate, BITS/4);
+    printf("\nGenerate:  ");
+    print_binary_array(group_generate, BITS/4);
+    printf("\nCarry:     ");
+    print_binary_array(group_carry, BITS/4);
+
+    printf("\n\nSECTION Level");
+    printf("\nPropagate: ");
+    print_binary_array(section_propagate, BITS/16);
+    printf("\nGenerate:  ");
+    print_binary_array(section_generate, BITS/16);
+    printf("\nCarry:     ");
+    print_binary_array(section_carry, BITS/16);
+
+    printf("\n\nSUPER SECTION Level");
+    printf("\nPropagate: ");
+    print_binary_array(super_section_propagate, BITS/64);
+    printf("\nGenerate:  ");
+    print_binary_array(super_section_generate, BITS/64);
+    printf("\nCarry:     ");
+    print_binary_array(super_section_carry, BITS/64);
+
+
+
+    printf("\n\nSUM\n");
+    print_binary_array(A, BITS);
+    printf("\n");
+    print_binary_array(B, BITS);
+    printf("\n");
+    print_binary_array(carry_in, BITS);
+    printf("\n");
+    print_binary_array(result, BITS);
+    printf("\n\n");
+#endif
+
+    array_to_hex_string(result);
+
+    /*
     long long int_result = 0;
     array_to_int(result, &int_result);
 
-    /*
     printf("\nS (bin) : ");
     print_binary_array(result, BITS);
     printf("\n\nS is %016llx or %lld\n", int_result, int_result);
     */
-
-    array_to_hex_string(result);
 }
 
 // ARRAY TO HEX STRING ================================================================
@@ -293,7 +351,7 @@ void next_level_P_and_G(int* propagate_next, int* generate_next, int* p, int* g,
             p_temp *= p[j*4 + i];
         }
 
-        g_temp = g[4*j+3]  +  p[4*j+3] * g[4*j+2]  +  p[4*j+3] * p[4*j+2] * g[4*j+1]  +  p[4*j+3]*p[4*j+2]*p[4*j+1]*g[4*j];
+        g_temp = g[4*j+3]   ||   p[4*j+3] * g[4*j+2]   ||   p[4*j+3] * p[4*j+2] * g[4*j+1]   ||   p[4*j+3] * p[4*j+2] * p[4*j+1] * g[4*j];
 
         propagate_next[j] = p_temp;
         generate_next[j] = g_temp;
@@ -314,9 +372,11 @@ void top_level_carry(int* p, int* g, int* carry_in, int size, int block){
 // LOWER LEVEL CARRY =============================================================
 void lower_level_carry(int* p, int* g, int* carry_in, int* group_carry, int size, int block){
 
-    //printf("\n\nDEBUGGING\n\n");
-    //printf("Group carry: %d\n", size/block);
-    //printf("g + p*c = c_in");
+    /*
+    printf("\n\nDEBUGGING\n\n");
+    printf("Group carry: %d\n", size/block);
+    printf("g + p*c = c_in");
+    */
 
     for (int j = 0; j < size/block; j++){
         carry_in[4*j] = g[4*j]  ||  (p[4*j] && group_carry[j]);
@@ -327,15 +387,15 @@ void lower_level_carry(int* p, int* g, int* carry_in, int* group_carry, int size
             //printf("%d + %d*%d = %d\n", g[4*j+i], p[4*j+i], carry_in[4*j+i-1], carry_in[4*j+i]);
         }
     }
+    //carry_in[0] = 0;
 }
 
 
 // SUM ===========================================================================
 void sum(int* result, int* A, int* B, int* carry_in, int c_in, int size){
-
-    result[0] = (A[0] ^ B[0]) ^ c_in;
+    result[0] = A[0] ^ B[0] ^ c_in;
     for (int i = 1; i < size; i++)
-        result[i] = (A[i] ^ B[i]) ^ carry_in[i-1];
+        result[i] = A[i] ^ B[i] ^ carry_in[i-1];
 
 }
 
