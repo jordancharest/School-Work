@@ -1,8 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <assert.h>
 
-#define HEX_DIGITS 256
+#define HEX_DIGITS 64
 #define BITS HEX_DIGITS*4
 
 
@@ -20,34 +21,12 @@ void print_binary_array(int* array, int size);
 void carry_lookahead_adder(int* A, int* B, int c_in);
 void add_bits(int* binary_array, int index, int dig1, int dig2, int dig3, int dig4);
 void user_input(int* binary_array);
-
-
-//void print_binary(long long number, int integers);
-//long long invert(long long num);
+void array_to_hex_string(int* array);
 
 
 // MAIN ====================================================
 int main()
 {
-    /*
-    long long a, b;
-    int A[sizeof(a)*8] = {0};    // binary array representation of a
-    int B[sizeof(a)*8] = {0};    // binary array representation of b
-
-
-    printf("Enter A (hex):\n");
-    scanf("%llx", &a);
-    printf("Enter B (hex):\n");
-    scanf("%llx", &b);
-
-    int_to_array(A, a);
-    int_to_array(B, b);
-    */
-
-
-
-
-
 
 
     int A[BITS] = {0};
@@ -55,16 +34,13 @@ int main()
     int B[BITS] = {0};
     user_input(B);
 
+    int c_in = 0;
+
+#if 0
     int operation;
     printf("\nAdd (0) or subtract (1):\n");
     scanf("%d", &operation);
 
-    /*
-    printf("\nA is %016llx or %lld", a, a);
-    printf("\nB is %016llx or %lld", b, b);
-    */
-
-    int c_in = 0;
     if (operation){      // subtraction
         c_in = 1;
         printf("\nInverting...");
@@ -72,14 +48,10 @@ int main()
         printf("\nB (bin) : ");
         print_binary_array(B, BITS);
     }
+#endif
 
-
-
-
-    printf("\n\nCalculate sum, S:\n");
-
+    //printf("\n\nCalculate sum, S:\n");
     carry_lookahead_adder(A, B, c_in);
-
 
     return 0;
 }
@@ -87,14 +59,12 @@ int main()
 // USER INPUT =====================================================================
 void user_input(int* binary_array){
 
-    printf("\n\nPlease enter a %d-digit (%d-bit) hexadecimal number:\n", HEX_DIGITS, BITS);
+    //printf("\n\nPlease enter a %d-digit (%d-bit) hexadecimal number:\n", HEX_DIGITS, BITS);
     char hex[HEX_DIGITS] = {0};
-
     scanf("%s", hex);
 
-    printf("You entered: %s\n", hex);
-    printf("The equivalent binary is:\n");
-
+    //printf("You entered: %s\n", hex);
+    // printf("The equivalent binary is:\n");
 
     int i = 0;
     while (hex[i]) {
@@ -144,19 +114,18 @@ void user_input(int* binary_array){
             case 'f':
                 add_bits(binary_array, i, 1,1,1,1); break;
             default:
-                printf("\n Invalid hex digit %c ", hex[i]);
+                printf("\n Invalid hex digit %c\n", hex[i]);
         }
 
         ++i;
     }
 
-    print_binary_array(binary_array, BITS);
+    //print_binary_array(binary_array, BITS);
 }
 
 
 // ADD BITS ==========================================================================
 void add_bits(int* binary_array, int index, int dig1, int dig2, int dig3, int dig4) {
-
     binary_array[BITS - index*4 - 1] = dig1;
     binary_array[BITS - index*4 - 2] = dig2;
     binary_array[BITS - index*4 - 3] = dig3;
@@ -183,31 +152,29 @@ void carry_lookahead_adder(int* A, int* B, int c_in){
 
 
     // need to be changed if block size changes
-    int propagate4[BITS/4] = {0};
-    int generate4[BITS/4] = {0};
+    int group_propagate[BITS/4] = {0};
+    int group_generate[BITS/4] = {0};
 
     // Divide into 4 groups again, calculate propagate and generate for each group
     block *= 4;
-    next_level_P_and_G(propagate4, generate4, propagate, generate, BITS, block);
+    next_level_P_and_G(group_propagate, group_generate, propagate, generate, BITS, block);
 
 
     // need to be changed if block size changes
-    int propagate16[BITS/16] = {0};
-    int generate16[BITS/16] = {0};
+    int section_propagate[BITS/16] = {0};
+    int section_generate[BITS/16] = {0};
 
     // Again
     block *= 4;
-    next_level_P_and_G(propagate16, generate16, propagate4, generate4, BITS, block);
-
+    next_level_P_and_G(section_propagate, section_generate, group_propagate, group_generate, BITS, block);
 
 
     // Now head back down to bit level, calculating the carry-in along the way
+    int carry_in16[BITS/16] = {0};      // change if block size changes; should be same size as section_propagate
+    top_level_carry(section_propagate, section_generate, carry_in16, BITS, block);
 
-    int carry_in16[BITS/16] = {0};      // change if block size changes; should be same size as propagate16
-    top_level_carry(propagate16, generate16, carry_in16, BITS, block);
-
-    int carry_in4[BITS/4] = {0};      // change if block size changes; should be same size as propagate4
-    lower_level_carry(propagate4, generate4, carry_in4, carry_in16, BITS, block);
+    int carry_in4[BITS/4] = {0};      // change if block size changes; should be same size as group_propagate
+    lower_level_carry(group_propagate, group_generate, carry_in4, carry_in16, BITS, block);
 
 
     block /= 4;
@@ -223,51 +190,54 @@ void carry_lookahead_adder(int* A, int* B, int c_in){
     long long int_result = 0;
     array_to_int(result, &int_result);
 
-
-
-
-
-    printf("\nA (bin) : ");
-    print_binary_array(A, BITS);
-    printf("\nB (bin) : ");
-    print_binary_array(B, BITS);
-
     /*
-    printf("\nPropagate  : ");
-    print_binary_array(propagate, sizeof(a)*8);
-    printf("\nGenerate   : ");
-    print_binary_array(generate, sizeof(a)*8);
-
-
-    printf("\nPropagate4 : ");
-    print_binary_array(propagate4, sizeof(a)*2);
-    printf("\nGenerate4  : ");
-    print_binary_array(generate4, sizeof(a)*2);
-
-
-    printf("\nPropagate16: ");
-    print_binary_array(propagate16, sizeof(a)/2);
-    printf("\nGenerate16 : ");
-    print_binary_array(generate16, sizeof(a)/2);
-
-
-    printf("\nCarry16    : ");
-    print_binary_array(carry_in16, sizeof(a)/2);
-
-    printf("\nCarry4     : ");
-    print_binary_array(carry_in4, sizeof(a)*2);
-
-    printf("\nCarry      : ");
-    print_binary_array(carry_in, sizeof(a)*8);
-    */
-
     printf("\nS (bin) : ");
     print_binary_array(result, BITS);
+    printf("\n\nS is %016llx or %lld\n", int_result, int_result);
+    */
 
-    printf("\n\nS is %016llx or %lld", int_result, int_result);
-
+    array_to_hex_string(result);
 }
 
+// ARRAY TO HEX STRING ================================================================
+void array_to_hex_string(int* array){
+
+    char hex[HEX_DIGITS+1];
+    hex[HEX_DIGITS] = '\0';
+
+    char temp[5];
+    temp[4] = '\0';
+
+    for(int i = (HEX_DIGITS); i > 0; i--){
+        for (int j = 0; j <= 3; j++){
+            if (array[4*i-j-1]){
+                temp[j] = '1';
+            } else {
+                temp[j] = '0';
+            }
+        }
+
+        if (strcmp(temp, "0000") == 0) hex[HEX_DIGITS-i] = '0';
+        else if (strcmp(temp, "0001") == 0) hex[HEX_DIGITS-i] = '1';
+        else if (strcmp(temp, "0010") == 0) hex[HEX_DIGITS-i] = '2';
+        else if (strcmp(temp, "0011") == 0) hex[HEX_DIGITS-i] = '3';
+        else if (strcmp(temp, "0100") == 0) hex[HEX_DIGITS-i] = '4';
+        else if (strcmp(temp, "0101") == 0) hex[HEX_DIGITS-i] = '5';
+        else if (strcmp(temp, "0110") == 0) hex[HEX_DIGITS-i] = '6';
+        else if (strcmp(temp, "0111") == 0) hex[HEX_DIGITS-i] = '7';
+        else if (strcmp(temp, "1000") == 0) hex[HEX_DIGITS-i] = '8';
+        else if (strcmp(temp, "1001") == 0) hex[HEX_DIGITS-i] = '9';
+        else if (strcmp(temp, "1010") == 0) hex[HEX_DIGITS-i] = 'A';
+        else if (strcmp(temp, "1011") == 0) hex[HEX_DIGITS-i] = 'B';
+        else if (strcmp(temp, "1100") == 0) hex[HEX_DIGITS-i] = 'C';
+        else if (strcmp(temp, "1101") == 0) hex[HEX_DIGITS-i] = 'D';
+        else if (strcmp(temp, "1110") == 0) hex[HEX_DIGITS-i] = 'E';
+        else if (strcmp(temp, "1111") == 0) hex[HEX_DIGITS-i] = 'F';
+    }
+
+    //printf("Hex Result:  %s\n", hex);
+    printf("%s", hex);
+}
 
 // INT TO ARRAY ===================================================================
 void int_to_array(int* array, long long number){
@@ -369,34 +339,3 @@ void sum(int* result, int* A, int* B, int* carry_in, int c_in, int size){
 
 }
 
-/*
-// PRINT BINARY ==================================================================
-void print_binary(long long number, int integers){
-
-    // pop off the least significant digit and call print_binary again
-    if (number) {
-        integers++;                             // track the number of integers
-        print_binary(number >> 1, integers);
-        putc((number & 1) ? '1' : '0', stdout);
-
-    // when there are no more digits to pop off, print leading zeros
-    } else if (integers < 64){
-        putc('0', stdout);
-        integers++;
-        print_binary(0, integers);
-    }
-}
-
-
-// INVERT ========================================================================
-long long invert(long long num){
-
-    unsigned int  NO_OF_BITS = sizeof(num) * 8;
-    long long inverted_num = 0;
-    for (int i = 0; i < NO_OF_BITS; i++){
-        if((num & (1 << i)))
-           inverted_num |= 1 << ((NO_OF_BITS - 1) - i);
-    }
-    return inverted_num;
-}
-*/
