@@ -57,12 +57,12 @@ int main()
 // USER INPUT =====================================================================
 void user_input(int* binary_array){
 
-    //printf("\n\nPlease enter a %d-digit (%d-bit) hexadecimal number:\n", HEX_DIGITS, BITS);
+    printf("\n\nPlease enter a %d-digit (%d-bit) hexadecimal number:\n", HEX_DIGITS, BITS);
     char hex[HEX_DIGITS] = {0};
     scanf("%s", hex);
 
-    //printf("You entered: %s\n", hex);
-    // printf("The equivalent binary is:\n");
+    printf("You entered: %s\n", hex);
+    printf("The equivalent binary is:\n");
 
     int i = 0;
     while (hex[i]) {
@@ -117,7 +117,7 @@ void user_input(int* binary_array){
 
         ++i;
     }
-    //print_binary_array(binary_array, BITS);
+    print_binary_array(binary_array, BITS);
 }
 
 
@@ -278,8 +278,7 @@ void array_to_hex_string(int* array){
         else if (strcmp(temp, "1111") == 0) hex[HEX_DIGITS-i] = 'F';
     }
 
-    //printf("Hex Result:  %s\n", hex);
-    printf("%s", hex);
+    printf("Hex Result:  %s\n", hex);
 }
 
 // INVERT ARRAY ==================================================================
