@@ -8,27 +8,25 @@
 
 
 // FUNCTION DECLARATIONS ===================================
-void int_to_array(int* array, long long num);
-void array_to_int(int* array, long long* num);
+void user_input(int* binary_array);
+void add_bits(int* binary_array, int index, int dig1, int dig2, int dig3, int dig4);
+void print_binary_array(int* array, int size);
 void invert_array(int* array, int size);
+
 void bit_level_p_and_g(int* propagate, int* generate, int* A, int* B, int size);
 void next_level_P_and_G(int* propagate_next, int* generate_next, int* p, int* g, int size, int block);
 void top_level_carry(int* propagate16, int* generate16, int* carry_in16, int size, int block);
 void lower_level_carry(int* p, int* g, int* carry_in, int* group_carry, int size, int block);
-void sum(int* result, int* A, int* B, int* carry_in, int c_in, int size);
-void print_binary_array(int* array, int size);
 
 void carry_lookahead_adder(int* A, int* B, int c_in);
-void add_bits(int* binary_array, int index, int dig1, int dig2, int dig3, int dig4);
-void user_input(int* binary_array);
 void array_to_hex_string(int* array);
+void sum(int* result, int* A, int* B, int* carry_in, int c_in, int size);
 
 
 // MAIN ====================================================
 int main()
 {
-
-
+    // Get two hex numbers to add, convert to binary arrays
     int A[BITS] = {0};
     user_input(A);
     int B[BITS] = {0};
@@ -36,7 +34,7 @@ int main()
 
     int c_in = 0;
 
-#if 0
+#if 0   // to easily add subtraction later if necessary
     int operation;
     printf("\nAdd (0) or subtract (1):\n");
     scanf("%d", &operation);
@@ -53,7 +51,7 @@ int main()
     //printf("\n\nCalculate sum, S:\n");
     carry_lookahead_adder(A, B, c_in);
 
-    return 0;
+    return EXIT_SUCCESS;
 }
 
 // USER INPUT =====================================================================
@@ -119,7 +117,6 @@ void user_input(int* binary_array){
 
         ++i;
     }
-
     //print_binary_array(binary_array, BITS);
 }
 
@@ -134,7 +131,6 @@ void add_bits(int* binary_array, int index, int dig1, int dig2, int dig3, int di
 
 // PRINT BINARY ARRAY ============================================================
 void print_binary_array(int* array, int size){
-
     for (int i = size-1; i >= 0; i--){
         if ((i+1)%4 == 0)   printf(" ");
         printf("%d", array[i]);
@@ -143,14 +139,14 @@ void print_binary_array(int* array, int size){
 
 // CARRY LOOKAHEAD ADDER ==========================================================
 void carry_lookahead_adder(int* A, int* B, int c_in){
-    // Divide into 4 groups, calculate propagate and generate for each group
+
     int block = 1;
     int propagate[BITS] = {0};
     int generate[BITS] = {0};
     bit_level_p_and_g(propagate, generate, A, B, BITS);
 
 
-    // GROUP
+    // GROUP: Divide into 4 groups, calculate propagate and generate functions for each group
     int group_propagate[BITS/4] = {0};
     int group_generate[BITS/4] = {0};
     block *= 4;
@@ -172,32 +168,30 @@ void carry_lookahead_adder(int* A, int* B, int c_in){
 
 
     // SUPER SECTION: head back down to bit level, calculating the carry-in along the way
-    int super_section_carry[BITS/64] = {0};
+    int super_section_carry[BITS/64+1] = {0};
     top_level_carry(super_section_propagate, super_section_generate, super_section_carry, BITS, block);
 
 
     // SECTION
-    int section_carry[BITS/16] = {0};
+    int section_carry[BITS/16+1] = {0};
     lower_level_carry(section_propagate, section_generate, section_carry, super_section_carry, BITS, block);
     block /= 4;
 
 
     // GROUP
-    int group_carry[BITS/4] = {0};      // change if block size changes; should be same size as group_propagate
+    int group_carry[BITS/4+1] = {0};      // change if block size changes; should be same size as group_propagate
     lower_level_carry(group_propagate, group_generate, group_carry, section_carry, BITS, block);
     block /= 4;
 
 
     // BIT LEVEL
-    int carry_in[BITS] = {0};
+    int carry_in[BITS+1] = {0};
     lower_level_carry(propagate, generate, carry_in, group_carry, BITS, block);
 
 
     // CALCULATE RESULT
     int result[BITS] = {0};
     sum(result, A, B, carry_in, c_in, BITS);
-
-
 
 #ifdef DEBUG_MODE
     printf("\nBIT Level");
@@ -233,7 +227,6 @@ void carry_lookahead_adder(int* A, int* B, int c_in){
     print_binary_array(super_section_carry, BITS/64);
 
 
-
     printf("\n\nSUM\n");
     print_binary_array(A, BITS);
     printf("\n");
@@ -247,14 +240,6 @@ void carry_lookahead_adder(int* A, int* B, int c_in){
 
     array_to_hex_string(result);
 
-    /*
-    long long int_result = 0;
-    array_to_int(result, &int_result);
-
-    printf("\nS (bin) : ");
-    print_binary_array(result, BITS);
-    printf("\n\nS is %016llx or %lld\n", int_result, int_result);
-    */
 }
 
 // ARRAY TO HEX STRING ================================================================
@@ -297,30 +282,6 @@ void array_to_hex_string(int* array){
     printf("%s", hex);
 }
 
-// INT TO ARRAY ===================================================================
-void int_to_array(int* array, long long number){
-
-    unsigned int NO_OF_BITS = sizeof(number)*8;
-
-    for (int i = 0; i < NO_OF_BITS; i++){
-        array[i] = number & 1;
-        number >>= 1;
-    }
-}
-
-// ARRAY TO INT ==================================================================
-void array_to_int(int* array, long long* number){
-
-    unsigned int NO_OF_BITS = sizeof(*number)*8;
-
-    for (int i = NO_OF_BITS - 1; i >= 0; i--){
-        *number <<= 1;
-
-        if (array[i])
-            *number |= 1;
-    }
-}
-
 // INVERT ARRAY ==================================================================
 void invert_array(int* array, int size){
 
@@ -331,7 +292,6 @@ void invert_array(int* array, int size){
 
 // BIT LEVEL PROPAGATE AND GENERATE ==============================================
 void bit_level_p_and_g(int* propagate, int* generate, int* A, int* B, int size){
-
     for (int i = 0; i < size; i++){
         propagate[i] = A[i] || B[i];
         generate[i] = A[i] && B[i];
@@ -361,7 +321,7 @@ void next_level_P_and_G(int* propagate_next, int* generate_next, int* p, int* g,
 // TOP LEVEL CARRY ===============================================================
 void top_level_carry(int* p, int* g, int* carry_in, int size, int block){
 
-    carry_in[0] = g[0];
+    carry_in[0] = 0;
 
     for (int i = 1; i < size/block; i++){
         carry_in[i] = g[i-1]  ||  (p[i-1] && carry_in[i-1]);
@@ -370,31 +330,20 @@ void top_level_carry(int* p, int* g, int* carry_in, int size, int block){
 
 // LOWER LEVEL CARRY =============================================================
 void lower_level_carry(int* p, int* g, int* carry_in, int* group_carry, int size, int block){
-
-    /*
-    printf("\n\nDEBUGGING\n\n");
-    printf("Group carry: %d\n", size/block);
-    printf("g + p*c = c_in");
-    */
-
     for (int j = 0; j < size/block; j++){
-        carry_in[4*j] = g[4*j]  ||  (p[4*j] && group_carry[j]);
-        //printf("\n%d + %d*%d = %d\n", g[4*j], p[4*j], group_carry[j], carry_in[4*j]);
+        carry_in[4*j+1] = g[4*j]  ||  (p[4*j] && group_carry[j]);
 
         for (int i = 1; i < 4; i++){
-            carry_in[4*j+i] = g[4*j+i]  ||  (p[4*j+i] && carry_in[4*j+i-1]);
-            //printf("%d + %d*%d = %d\n", g[4*j+i], p[4*j+i], carry_in[4*j+i-1], carry_in[4*j+i]);
+            carry_in[4*j+i+1] = g[4*j+i]  ||  (p[4*j+i] && carry_in[4*j+i]);
         }
     }
-    //carry_in[0] = 0;
+    carry_in[0] = 0;
 }
 
 
 // SUM ===========================================================================
 void sum(int* result, int* A, int* B, int* carry_in, int c_in, int size){
-    result[0] = A[0] ^ B[0] ^ c_in;
-    for (int i = 1; i < size; i++)
-        result[i] = A[i] ^ B[i] ^ carry_in[i-1];
-
+    for (int i = 0; i < size; i++)
+        result[i] = A[i] ^ B[i] ^ carry_in[i];
 }
 
