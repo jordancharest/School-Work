@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 
 #define HEX_DIGITS 64
 #define BITS HEX_DIGITS*4
@@ -48,13 +47,14 @@ int main()
     }
 #endif
 
-    //printf("\n\nCalculate sum, S:\n");
     carry_lookahead_adder(A, B, c_in);
 
     return EXIT_SUCCESS;
 }
 
-// USER INPUT =====================================================================
+// USER INPUT ========================================================================
+/* Prompt the user for (or scan from file) a hex string, then convert the string
+    to an array of 1's and 0's (binary array)                                       */
 void user_input(int* binary_array){
 
     printf("\n\nPlease enter a %d-digit (%d-bit) hexadecimal number:\n", HEX_DIGITS, BITS);
@@ -122,6 +122,7 @@ void user_input(int* binary_array){
 
 
 // ADD BITS ==========================================================================
+/* Populate the binary array with the passed digits                                 */
 void add_bits(int* binary_array, int index, int dig1, int dig2, int dig3, int dig4) {
     binary_array[BITS - index*4 - 1] = dig1;
     binary_array[BITS - index*4 - 2] = dig2;
@@ -129,7 +130,7 @@ void add_bits(int* binary_array, int index, int dig1, int dig2, int dig3, int di
     binary_array[BITS - index*4 - 4] = dig4;
 }
 
-// PRINT BINARY ARRAY ============================================================
+// PRINT BINARY ARRAY ===============================================================
 void print_binary_array(int* array, int size){
     for (int i = size-1; i >= 0; i--){
         if ((i+1)%4 == 0)   printf(" ");
@@ -137,7 +138,8 @@ void print_binary_array(int* array, int size){
     }
 }
 
-// CARRY LOOKAHEAD ADDER ==========================================================
+// CARRY LOOKAHEAD ADDER =============================================================
+/* Controls the collapses and expansions of the Carry Lookahead Adder algorithm     */
 void carry_lookahead_adder(int* A, int* B, int c_in){
 
     int block = 1;
@@ -239,10 +241,10 @@ void carry_lookahead_adder(int* A, int* B, int c_in){
 #endif
 
     array_to_hex_string(result);
-
 }
 
-// ARRAY TO HEX STRING ================================================================
+// ARRAY TO HEX STRING ===================================================================
+/* Converts a binary array back to a hex string for output                              */
 void array_to_hex_string(int* array){
 
     char hex[HEX_DIGITS+1];
@@ -252,6 +254,7 @@ void array_to_hex_string(int* array){
     temp[4] = '\0';
 
     for(int i = (HEX_DIGITS); i > 0; i--){
+        // get next four binary digits
         for (int j = 0; j <= 3; j++){
             if (array[4*i-j-1]){
                 temp[j] = '1';
@@ -281,7 +284,8 @@ void array_to_hex_string(int* array){
     printf("Hex Result:  %s\n", hex);
 }
 
-// INVERT ARRAY ==================================================================
+// INVERT ARRAY ======================================================================
+/* flip 1's and 0's in a binary array (for subtraction)                             */
 void invert_array(int* array, int size){
 
     for (int i = 0; i < size; i++){
@@ -289,7 +293,8 @@ void invert_array(int* array, int size){
     }
 }
 
-// BIT LEVEL PROPAGATE AND GENERATE ==============================================
+// BIT LEVEL PROPAGATE AND GENERATE ==================================================
+/* Calculate propagate and generate functions at the bit level                      */
 void bit_level_p_and_g(int* propagate, int* generate, int* A, int* B, int size){
     for (int i = 0; i < size; i++){
         propagate[i] = A[i] || B[i];
@@ -297,7 +302,8 @@ void bit_level_p_and_g(int* propagate, int* generate, int* A, int* B, int size){
     }
 }
 
-// NEXT LEVEL PROPAGATE AND GENERATE ==============================================
+// NEXT LEVEL PROPAGATE AND GENERATE =================================================
+/* Calculate propagate and generate functions at any level above the bit level      */
 void next_level_P_and_G(int* propagate_next, int* generate_next, int* p, int* g, int size, int block){
 
     int p_temp;
@@ -306,10 +312,12 @@ void next_level_P_and_G(int* propagate_next, int* generate_next, int* p, int* g,
         p_temp = 1;
         g_temp = 0;
 
+        // only true if the carry is propagated along the whole group
         for (int i = 0; i < 4; i++){
             p_temp *= p[j*4 + i];
         }
 
+        // true if a carry is generated at the last bit or if a previously generated carry is propagated to the last bit in the group
         g_temp = g[4*j+3]   ||   p[4*j+3] * g[4*j+2]   ||   p[4*j+3] * p[4*j+2] * g[4*j+1]   ||   p[4*j+3] * p[4*j+2] * p[4*j+1] * g[4*j];
 
         propagate_next[j] = p_temp;
@@ -317,9 +325,11 @@ void next_level_P_and_G(int* propagate_next, int* generate_next, int* p, int* g,
     }
 }
 
-// TOP LEVEL CARRY ===============================================================
+// TOP LEVEL CARRY ===================================================================
+/* Calculate the carry at the top level (e.g. super section)                        */
 void top_level_carry(int* p, int* g, int* carry_in, int size, int block){
 
+    // Never carry in to the first bit
     carry_in[0] = 0;
 
     for (int i = 1; i < size/block; i++){
@@ -327,7 +337,8 @@ void top_level_carry(int* p, int* g, int* carry_in, int size, int block){
     }
 }
 
-// LOWER LEVEL CARRY =============================================================
+// LOWER LEVEL CARRY =================================================================
+/* Calculate the carry for any level that is not the top level                      */
 void lower_level_carry(int* p, int* g, int* carry_in, int* group_carry, int size, int block){
     for (int j = 0; j < size/block; j++){
         carry_in[4*j+1] = g[4*j]  ||  (p[4*j] && group_carry[j]);
@@ -336,11 +347,14 @@ void lower_level_carry(int* p, int* g, int* carry_in, int* group_carry, int size
             carry_in[4*j+i+1] = g[4*j+i]  ||  (p[4*j+i] && carry_in[4*j+i]);
         }
     }
+    // Never carry into the first bit
     carry_in[0] = 0;
 }
 
 
-// SUM ===========================================================================
+// SUM ===============================================================================
+/* Ripple add the two numbers and the calculated carries (would be parallel
+    in hardware)                                                                    */
 void sum(int* result, int* A, int* B, int* carry_in, int c_in, int size){
     for (int i = 0; i < size; i++)
         result[i] = A[i] ^ B[i] ^ carry_in[i];
