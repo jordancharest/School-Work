@@ -135,11 +135,8 @@ alnum_t* read_directory_contents(DIR* directory, alnum_t* dictionary, char* file
                 exit(EXIT_FAILURE);
         }
 
-        // check if the current file is a regular file
-        if (S_ISREG(filedata.st_mode)){
-            dictionary = read_file_contents(full_path, dictionary);
-
-        } else continue;   // ignore if it is not a regular file
+        // attempt to read contents if the current file is a regular file
+        if (S_ISREG(filedata.st_mode)) dictionary = read_file_contents(full_path, dictionary);
     }
 
     closedir(directory);
@@ -191,8 +188,7 @@ int main(int argc, char** argv){
 
     // Dictionary of word counts
     alnum_t* dictionary = malloc(INITIAL_SIZE * DICT_ENTRY_SIZE);
-    if ( dictionary == NULL )
-    {
+    if ( dictionary == NULL ){
         fprintf( stderr, "ERROR: malloc() failed\n" );
         return EXIT_FAILURE;
     }
@@ -210,11 +206,11 @@ int main(int argc, char** argv){
 
     dictionary = read_directory_contents(directory, dictionary, file_path);
 
-    printf("All done. (successfully read %d words; %d unique words).\n", total_words, unique_words);
+    printf("All done (successfully read %d words; %d unique words).\n", total_words, unique_words);
     print_dictionary(dictionary, num_display);
 
     free(dictionary);
     dictionary = NULL;
 
-	return EXIT_SUCCESS;
+    return EXIT_SUCCESS;
 }
