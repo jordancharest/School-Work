@@ -20,7 +20,7 @@ void next_level_P_and_G(int* propagate_next, int* generate_next, int* p, int* g,
 void top_level_carry(int* propagate16, int* generate16, int* carry_in16, int size, int block);
 void lower_level_carry(int* p, int* g, int* carry_in, int* group_carry, int size, int block);
 
-void carry_lookahead_adder(int* A, int* B, int c_in, int elements_per_proc);
+void carry_lookahead_adder(int* A, int* B, int c_in, int elements_per_proc, int world_rank);
 void array_to_hex_string(int* array);
 void sum(int* result, int* A, int* B, int* carry_in, int c_in, int size);
 
@@ -75,7 +75,7 @@ int main()
     MPI_Scatter(A, elements_per_proc, MPI_INT, sub_A, elements_per_proc, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Scatter(B, elements_per_proc, MPI_INT, sub_B, elements_per_proc, MPI_INT, 0, MPI_COMM_WORLD);
 
-    carry_lookahead_adder(sub_A, sub_B, c_in, elements_per_proc);
+    carry_lookahead_adder(sub_A, sub_B, c_in, elements_per_proc, world_rank);
 
     // Finalize the MPI environment.
     MPI_Finalize();
@@ -171,11 +171,11 @@ void print_binary_array(int* array, int size){
 
 // CARRY LOOKAHEAD ADDER =============================================================
 /* Controls the collapses and expansions of the Carry Lookahead Adder algorithm     */
-void carry_lookahead_adder(int* A, int* B, int c_in, int elements_per_proc){
+void carry_lookahead_adder(int* A, int* B, int c_in, int elements_per_proc, int world_rank) {
 
     int block = 1;
-    int propagate = malloc(sizeof(int) * elements_per_proc);
-    int generate[ = malloc(sizeof(int) * elements_per_proc);
+    int* propagate = malloc(sizeof(int) * elements_per_proc);
+    int* generate = malloc(sizeof(int) * elements_per_proc);
     bit_level_p_and_g(propagate, generate, A, B, elements_per_proc);
 
 /// DYNAMICALLY ALLOCATE ALL THIS-------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -187,38 +187,38 @@ void carry_lookahead_adder(int* A, int* B, int c_in, int elements_per_proc){
 
 
     // SECTION
-    int section_propagate = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,2));
-    int section_generate = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,2));
+    int* section_propagate = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,2));
+    int* section_generate = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,2));
     block *= BLOCK_SIZE;
     next_level_P_and_G(section_propagate, section_generate, group_propagate, group_generate, elements_per_proc, block);
 
 
     // SUPER SECTION
-    int super_section_propagate = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,3));
-    int super_section_generate = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,3));
+    int* super_section_propagate = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,3));
+    int* super_section_generate = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,3));
     block *= BLOCK_SIZE;
     next_level_P_and_G(super_section_propagate, super_section_generate, section_propagate, section_generate, elements_per_proc, block);
 
 
     // SUPER SECTION: head back down to bit level, calculating the carry-in along the way
-    int super_section_carry = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,3));
+    int* super_section_carry = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,3));
     top_level_carry(super_section_propagate, super_section_generate, super_section_carry, elements_per_proc, block);
 
 
     // SECTION
-    int section_carry = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,2));
+    int* section_carry = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,2));
     lower_level_carry(section_propagate, section_generate, section_carry, super_section_carry, elements_per_proc, block);
     block /= BLOCK_SIZE;
 
 
     // GROUP
-    int group_carry = malloc(sizeof(int) * elements_per_proc / BLOCK_SIZE);
+    int* group_carry = malloc(sizeof(int) * elements_per_proc / BLOCK_SIZE);
     lower_level_carry(group_propagate, group_generate, group_carry, section_carry, elements_per_proc, block);
     block /= BLOCK_SIZE;
 
 
     // BIT LEVEL
-    int carry_in = malloc(sizeof(int) * elements_per_proc);
+    int* carry_in = malloc(sizeof(int) * elements_per_proc);
     lower_level_carry(propagate, generate, carry_in, group_carry, elements_per_proc, block);
 
 
