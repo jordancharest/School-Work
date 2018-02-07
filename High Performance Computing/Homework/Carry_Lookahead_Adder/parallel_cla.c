@@ -1,11 +1,12 @@
+#include <mpi.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 
-#define HEX_DIGITS 262144
+#define HEX_DIGITS 64
 #define BITS HEX_DIGITS*4
-#define BLOCK_SIZE 16
+#define BLOCK_SIZE 4
 
 
 // FUNCTION DECLARATIONS ===================================
@@ -19,7 +20,7 @@ void next_level_P_and_G(int* propagate_next, int* generate_next, int* p, int* g,
 void top_level_carry(int* propagate16, int* generate16, int* carry_in16, int size, int block);
 void lower_level_carry(int* p, int* g, int* carry_in, int* group_carry, int size, int block);
 
-void carry_lookahead_adder(int* A, int* B, int c_in);
+void carry_lookahead_adder(int* A, int* B, int c_in, int elements_per_proc);
 void array_to_hex_string(int* array);
 void sum(int* result, int* A, int* B, int* carry_in, int c_in, int size);
 
@@ -27,11 +28,28 @@ void sum(int* result, int* A, int* B, int* carry_in, int c_in, int size);
 // MAIN ====================================================
 int main()
 {
-    // Get two hex numbers to add, convert to binary arrays
+    MPI_Init(NULL, NULL);
+    // Get the number of processes
+    int world_size;
+    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+
+    // Get the rank of the process
+    int world_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+
+    // Get the name of the processor
+    char processor_name[MPI_MAX_PROCESSOR_NAME];
+    int name_len;
+    MPI_Get_processor_name(processor_name, &name_len);
+
     int A[BITS] = {0};
-    user_input(A);
     int B[BITS] = {0};
-    user_input(B);
+    if (world_rank == 0) {
+	printf("\nRank 0...reading user input");
+    	// Get two hex numbers to add, convert to binary arrays
+    	user_input(A);
+    	user_input(B);
+    }
 
     int c_in = 0;
 
@@ -49,7 +67,18 @@ int main()
     }
 #endif
 
-    carry_lookahead_adder(A, B, c_in);
+    /* need to dynamically allocate sub_arrays based on numper of processors (MPI_Comm_size())*/
+    int elements_per_proc = BITS/world_size;
+    int* sub_A = malloc(sizeof(int) * elements_per_proc);
+    int* sub_B = malloc(sizeof(int) * elements_per_proc);
+
+    MPI_Scatter(A, elements_per_proc, MPI_INT, sub_A, elements_per_proc, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Scatter(B, elements_per_proc, MPI_INT, sub_B, elements_per_proc, MPI_INT, 0, MPI_COMM_WORLD);
+
+    carry_lookahead_adder(sub_A, sub_B, c_in, elements_per_proc);
+
+    // Finalize the MPI environment.
+    MPI_Finalize();
 
     return EXIT_SUCCESS;
 }
@@ -142,107 +171,118 @@ void print_binary_array(int* array, int size){
 
 // CARRY LOOKAHEAD ADDER =============================================================
 /* Controls the collapses and expansions of the Carry Lookahead Adder algorithm     */
-void carry_lookahead_adder(int* A, int* B, int c_in){
+void carry_lookahead_adder(int* A, int* B, int c_in, int elements_per_proc){
 
     int block = 1;
-    int propagate[BITS] = {0};
-    int generate[BITS] = {0};
-    bit_level_p_and_g(propagate, generate, A, B, BITS);
+    int propagate = malloc(sizeof(int) * elements_per_proc);
+    int generate[ = malloc(sizeof(int) * elements_per_proc);
+    bit_level_p_and_g(propagate, generate, A, B, elements_per_proc);
 
-
+/// DYNAMICALLY ALLOCATE ALL THIS-------------------------------------------------------------------------------------------------------------------------------------------------------
     // GROUP: Divide into 4 groups, calculate propagate and generate functions for each group
-    int group_propagate[BITS/BLOCK_SIZE] = {0};
-    int group_generate[BITS/BLOCK_SIZE] = {0};
+    int* group_propagate = malloc(sizeof(int) * elements_per_proc / BLOCK_SIZE);
+    int* group_generate = malloc(sizeof(int) * elements_per_proc / BLOCK_SIZE);
     block *= BLOCK_SIZE;
-    next_level_P_and_G(group_propagate, group_generate, propagate, generate, BITS, block);
+    next_level_P_and_G(group_propagate, group_generate, propagate, generate, elements_per_proc, block);
 
 
     // SECTION
-    int section_propagate[ BITS / (BLOCK_SIZE*BLOCK_SIZE) ] = {0};  // using pow() won't compile: 'can't initialize variable sized object'
-    int section_generate[BITS/ (BLOCK_SIZE*BLOCK_SIZE) ] = {0};
+    int section_propagate = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,2));
+    int section_generate = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,2));
     block *= BLOCK_SIZE;
-    next_level_P_and_G(section_propagate, section_generate, group_propagate, group_generate, BITS, block);
+    next_level_P_and_G(section_propagate, section_generate, group_propagate, group_generate, elements_per_proc, block);
 
 
     // SUPER SECTION
-    int super_section_propagate[BITS/ (BLOCK_SIZE*BLOCK_SIZE*BLOCK_SIZE) ] = {0};
-    int super_section_generate[BITS/ (BLOCK_SIZE*BLOCK_SIZE*BLOCK_SIZE) ] = {0};
+    int super_section_propagate = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,3));
+    int super_section_generate = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,3));
     block *= BLOCK_SIZE;
-    next_level_P_and_G(super_section_propagate, super_section_generate, section_propagate, section_generate, BITS, block);
+    next_level_P_and_G(super_section_propagate, super_section_generate, section_propagate, section_generate, elements_per_proc, block);
 
 
     // SUPER SECTION: head back down to bit level, calculating the carry-in along the way
-    int super_section_carry[BITS/ (BLOCK_SIZE*BLOCK_SIZE*BLOCK_SIZE)] = {0};
-    top_level_carry(super_section_propagate, super_section_generate, super_section_carry, BITS, block);
+    int super_section_carry = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,3));
+    top_level_carry(super_section_propagate, super_section_generate, super_section_carry, elements_per_proc, block);
 
 
     // SECTION
-    int section_carry[BITS/ (BLOCK_SIZE*BLOCK_SIZE)] = {0};
-    lower_level_carry(section_propagate, section_generate, section_carry, super_section_carry, BITS, block);
+    int section_carry = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,2));
+    lower_level_carry(section_propagate, section_generate, section_carry, super_section_carry, elements_per_proc, block);
     block /= BLOCK_SIZE;
 
 
     // GROUP
-    int group_carry[BITS/BLOCK_SIZE] = {0};      // change if block size changes; should be same size as group_propagate
-    lower_level_carry(group_propagate, group_generate, group_carry, section_carry, BITS, block);
+    int group_carry = malloc(sizeof(int) * elements_per_proc / BLOCK_SIZE);
+    lower_level_carry(group_propagate, group_generate, group_carry, section_carry, elements_per_proc, block);
     block /= BLOCK_SIZE;
 
 
     // BIT LEVEL
-    int carry_in[BITS] = {0};
-    lower_level_carry(propagate, generate, carry_in, group_carry, BITS, block);
+    int carry_in = malloc(sizeof(int) * elements_per_proc);
+    lower_level_carry(propagate, generate, carry_in, group_carry, elements_per_proc, block);
 
 
     // CALCULATE RESULT
-    int result[BITS] = {0};
-    sum(result, A, B, carry_in, c_in, BITS);
+    int num1[BITS] = {0};
+    int num2[BITS] = {0};
+    int total_carry[BITS] = {0};
+
+    MPI_Gather(num1, elements_per_proc, MPI_INT, A, elements_per_proc, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Gather(num2, elements_per_proc, MPI_INT, B, elements_per_proc, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Gather(total_carry, elements_per_proc, MPI_INT, carry_in, elements_per_proc, MPI_INT, 0, MPI_COMM_WORLD);
+
+
+    if (world_rank == 0) {
+        int result[BITS] = {0};
+        sum(result, num1, num2, total_carry, c_in, BITS);
+        array_to_hex_string(result);
+    }
 
 #ifdef DEBUG_MODE
     printf("\nBIT Level");
     printf("\nPropagate: ");
-    print_binary_array(propagate, BITS);
+    print_binary_array(propagate, elements_per_proc);
     printf("\nGenerate:  ");
-    print_binary_array(generate, BITS);
+    print_binary_array(generate, elements_per_proc);
     printf("\nCarry:     ");
-    print_binary_array(carry_in, BITS);
+    print_binary_array(carry_in, elements_per_proc);
 
     printf("\n\nGROUP Level");
     printf("\nPropagate: ");
-    print_binary_array(group_propagate, BITS/4);
+    print_binary_array(group_propagate, elements_per_proc/4);
     printf("\nGenerate:  ");
-    print_binary_array(group_generate, BITS/4);
+    print_binary_array(group_generate, elements_per_proc/4);
     printf("\nCarry:     ");
-    print_binary_array(group_carry, BITS/4);
+    print_binary_array(group_carry, elements_per_proc/4);
 
     printf("\n\nSECTION Level");
     printf("\nPropagate: ");
-    print_binary_array(section_propagate, BITS/16);
+    print_binary_array(section_propagate, elements_per_proc/16);
     printf("\nGenerate:  ");
-    print_binary_array(section_generate, BITS/16);
+    print_binary_array(section_generate, elements_per_proc/16);
     printf("\nCarry:     ");
-    print_binary_array(section_carry, BITS/16);
+    print_binary_array(section_carry, elements_per_proc/16);
 
     printf("\n\nSUPER SECTION Level");
     printf("\nPropagate: ");
-    print_binary_array(super_section_propagate, BITS/64);
+    print_binary_array(super_section_propagate, elements_per_proc/64);
     printf("\nGenerate:  ");
-    print_binary_array(super_section_generate, BITS/64);
+    print_binary_array(super_section_generate, elements_per_proc/64);
     printf("\nCarry:     ");
-    print_binary_array(super_section_carry, BITS/64);
+    print_binary_array(super_section_carry, elements_per_proc/64);
 
 
     printf("\n\nSUM\n");
-    print_binary_array(A, BITS);
+    print_binary_array(A, elements_per_proc);
     printf("\n");
-    print_binary_array(B, BITS);
+    print_binary_array(B, elements_per_proc);
     printf("\n");
-    print_binary_array(carry_in, BITS);
+    print_binary_array(carry_in, elements_per_proc);
     printf("\n");
-    print_binary_array(result, BITS);
+    print_binary_array(result, elements_per_proc);
     printf("\n\n");
 #endif
 
-    array_to_hex_string(result);
 }
 
 // ARRAY TO HEX STRING ===================================================================
