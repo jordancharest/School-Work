@@ -179,6 +179,7 @@ void carry_lookahead_adder(int* num1, int* num2, int* A, int* B, int c_in,
     int gpc_section[3] = {0};
     int gpc_group[3] = {0};
     int gpc_bit[3] = {0};
+    MPI_Request request;
     MPI_Request request_top;
     MPI_Request request_section;
     MPI_Request request_group;
