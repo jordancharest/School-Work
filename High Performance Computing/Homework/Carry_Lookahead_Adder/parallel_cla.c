@@ -17,10 +17,10 @@ void invert_array(int* array, int size);
 
 void bit_level_p_and_g(int* propagate, int* generate, int* A, int* B, int size);
 void next_level_P_and_G(int* propagate_next, int* generate_next, int* p, int* g, int size, int block);
-void top_level_carry(int* propagate16, int* generate16, int* carry_in16, int size, int block);
-void lower_level_carry(int* p, int* g, int* carry_in, int* group_carry, int size, int block);
+void top_level_carry(int* p, int* g, int* carry_in, int size, int block, int* gpc_prev, int world_rank);
+void lower_level_carry(int* p, int* g, int* carry_in, int* group_carry, int size, int block, int* gpc_prev, int world_rank);
 
-void carry_lookahead_adder(int* A, int* B, int c_in, int elements_per_proc, int world_rank);
+void carry_lookahead_adder(int* num1, int* num2, int* A, int* B, int c_in, int elements_per_proc, int world_rank, int world_size);
 void array_to_hex_string(int* array);
 void sum(int* result, int* A, int* B, int* carry_in, int c_in, int size);
 
@@ -75,7 +75,7 @@ int main()
     MPI_Scatter(A, elements_per_proc, MPI_INT, sub_A, elements_per_proc, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Scatter(B, elements_per_proc, MPI_INT, sub_B, elements_per_proc, MPI_INT, 0, MPI_COMM_WORLD);
 
-    carry_lookahead_adder(sub_A, sub_B, c_in, elements_per_proc, world_rank);
+    carry_lookahead_adder(A, B, sub_A, sub_B, c_in, elements_per_proc, world_rank, world_size);
 
     // Finalize the MPI environment.
     MPI_Finalize();
@@ -88,12 +88,12 @@ int main()
     to an array of 1's and 0's (binary array)                                       */
 void user_input(int* binary_array){
 
-    printf("\n\nPlease enter a %d-digit (%d-bit) hexadecimal number:\n", HEX_DIGITS, BITS);
+    //printf("\n\nPlease enter a %d-digit (%d-bit) hexadecimal number:\n", HEX_DIGITS, BITS);
     char hex[HEX_DIGITS] = {0};
     scanf("%s", hex);
 
-    printf("You entered: %s\n", hex);
-    printf("The equivalent binary is:\n");
+    //printf("You entered: %s\n", hex);
+    //printf("The equivalent binary is:\n");
 
     int i = 0;
     while (hex[i]) {
@@ -148,7 +148,7 @@ void user_input(int* binary_array){
 
         ++i;
     }
-    print_binary_array(binary_array, BITS);
+    //print_binary_array(binary_array, BITS);
 }
 
 
@@ -171,14 +171,32 @@ void print_binary_array(int* array, int size){
 
 // CARRY LOOKAHEAD ADDER =============================================================
 /* Controls the collapses and expansions of the Carry Lookahead Adder algorithm     */
-void carry_lookahead_adder(int* A, int* B, int c_in, int elements_per_proc, int world_rank) {
+void carry_lookahead_adder(int* num1, int* num2, int* A, int* B, int c_in,
+	                   int elements_per_proc, int world_rank, int world_size) {
+
+    // Prepare to receive generates, propagates, and carries from previous processors
+    int gpc_top[3] = {0};
+    int gpc_section[3] = {0};
+    int gpc_group[3] = {0};
+    int gpc_bit[3] = {0};
+    MPI_Request request_top;
+    MPI_Request request_section;
+    MPI_Request request_group;
+    MPI_Request request_bit;
+
+    if (world_rank > 0) {
+        MPI_Irecv(gpc_top, 3, MPI_INT, world_rank-1, 0, MPI_COMM_WORLD, &request_top);
+        MPI_Irecv(gpc_section, 3, MPI_INT, world_rank-1, 0, MPI_COMM_WORLD, &request_section);
+        MPI_Irecv(gpc_group, 3, MPI_INT, world_rank-1, 0, MPI_COMM_WORLD, &request_group);
+        MPI_Irecv(gpc_bit, 3, MPI_INT, world_rank-1, 0, MPI_COMM_WORLD, &request_bit);
+    }
+
 
     int block = 1;
     int* propagate = malloc(sizeof(int) * elements_per_proc);
     int* generate = malloc(sizeof(int) * elements_per_proc);
     bit_level_p_and_g(propagate, generate, A, B, elements_per_proc);
 
-/// DYNAMICALLY ALLOCATE ALL THIS-------------------------------------------------------------------------------------------------------------------------------------------------------
     // GROUP: Divide into 4 groups, calculate propagate and generate functions for each group
     int* group_propagate = malloc(sizeof(int) * elements_per_proc / BLOCK_SIZE);
     int* group_generate = malloc(sizeof(int) * elements_per_proc / BLOCK_SIZE);
@@ -202,44 +220,110 @@ void carry_lookahead_adder(int* A, int* B, int c_in, int elements_per_proc, int 
 
     // SUPER SECTION: head back down to bit level, calculating the carry-in along the way
     int* super_section_carry = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,3));
-    top_level_carry(super_section_propagate, super_section_generate, super_section_carry, elements_per_proc, block);
+    if (world_rank > 0) MPI_Wait(&request_top, MPI_STATUS_IGNORE);
+    top_level_carry(super_section_propagate, super_section_generate, super_section_carry, elements_per_proc, block, gpc_top, world_rank);
+
+    // Prepare and send generate, propagate, and carry to next process
+    int gen_prop_carry[3] = {0};
+    if (world_rank != (world_size-1)) {
+        gen_prop_carry[0] = super_section_generate[elements_per_proc/block - 1];
+        gen_prop_carry[1] = super_section_propagate[elements_per_proc/block - 1];
+        gen_prop_carry[2] = super_section_carry[elements_per_proc/block - 1];
+
+        MPI_Isend(gen_prop_carry, 3, MPI_INT, world_rank+1, 0, MPI_COMM_WORLD,  &request);
+    }
 
 
     // SECTION
     int* section_carry = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,2));
-    lower_level_carry(section_propagate, section_generate, section_carry, super_section_carry, elements_per_proc, block);
+    if (world_rank > 0) MPI_Wait(&request_section, MPI_STATUS_IGNORE);
+    lower_level_carry(section_propagate, section_generate, section_carry, super_section_carry, elements_per_proc, block, gpc_section, world_rank);
     block /= BLOCK_SIZE;
+
+    // Prepare and send generate, propagate, and carry to next process
+    if (world_rank != (world_size-1)) {
+        gen_prop_carry[0] = section_generate[elements_per_proc/block - 1];
+        gen_prop_carry[1] = section_propagate[elements_per_proc/block - 1];
+        gen_prop_carry[2] = section_carry[elements_per_proc/block - 1];
+
+        MPI_Isend(gen_prop_carry, 3, MPI_INT, world_rank+1, 0, MPI_COMM_WORLD,  &request);
+    }
 
 
     // GROUP
     int* group_carry = malloc(sizeof(int) * elements_per_proc / BLOCK_SIZE);
-    lower_level_carry(group_propagate, group_generate, group_carry, section_carry, elements_per_proc, block);
+    if (world_rank > 0) MPI_Wait(&request_group, MPI_STATUS_IGNORE);
+    lower_level_carry(group_propagate, group_generate, group_carry, section_carry, elements_per_proc, block, gpc_group, world_rank);
     block /= BLOCK_SIZE;
+
+    // Prepare and send generate, propagate, and carry to next process
+    if (world_rank != (world_size-1)) {
+        gen_prop_carry[0] = group_generate[elements_per_proc/block - 1];
+        gen_prop_carry[1] = section_propagate[elements_per_proc/block - 1];
+        gen_prop_carry[2] = section_carry[elements_per_proc/block - 1];
+
+        MPI_Isend(gen_prop_carry, 3, MPI_INT, world_rank+1, 0, MPI_COMM_WORLD,  &request);
+    }
 
 
     // BIT LEVEL
     int* carry_in = malloc(sizeof(int) * elements_per_proc);
-    lower_level_carry(propagate, generate, carry_in, group_carry, elements_per_proc, block);
+
+    if (world_rank > 0) MPI_Wait(&request_bit, MPI_STATUS_IGNORE);
+    if (world_rank == 0) printf("\n\n\nCALCULATE BIT LEVEL CARRY IN - PROCESS ZERO\n");
+    lower_level_carry(propagate, generate, carry_in, group_carry, elements_per_proc, block, gpc_bit, world_rank);
+
+    if (world_rank == 0) {
+	printf("\n");
+	print_binary_array(carry_in, elements_per_proc);
+    }
+
+
+    // Prepare and send generate, propagate, and carry to next process
+    if (world_rank != (world_size-1)) {
+        gen_prop_carry[0] = generate[elements_per_proc - 1];
+        gen_prop_carry[1] = propagate[elements_per_proc - 1];
+        gen_prop_carry[2] = carry_in[elements_per_proc - 1];
+
+        MPI_Isend(gen_prop_carry, 3, MPI_INT, world_rank+1, 0, MPI_COMM_WORLD,  &request);
+    }
+
 
 
     // CALCULATE RESULT
-    int num1[BITS] = {0};
-    int num2[BITS] = {0};
     int total_carry[BITS] = {0};
 
-    MPI_Gather(num1, elements_per_proc, MPI_INT, A, elements_per_proc, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Gather(num2, elements_per_proc, MPI_INT, B, elements_per_proc, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Gather(total_carry, elements_per_proc, MPI_INT, carry_in, elements_per_proc, MPI_INT, 0, MPI_COMM_WORLD);
+    if (world_rank == 0) {
+	printf("\n");
+	print_binary_array(carry_in, elements_per_proc);
+    }
 
+    MPI_Gather(carry_in, elements_per_proc, MPI_INT, total_carry, elements_per_proc, MPI_INT, 0, MPI_COMM_WORLD);
 
     if (world_rank == 0) {
-        int result[BITS] = {0};
+	printf("\n");
+	print_binary_array(carry_in, elements_per_proc);
+    }
+
+
+
+    int result[BITS] = {0};
+    if (world_rank == 0) {
         sum(result, num1, num2, total_carry, c_in, BITS);
         array_to_hex_string(result);
     }
 
 #ifdef DEBUG_MODE
-    printf("\nBIT Level");
+
+    int message;
+    if (world_rank == 1)
+	MPI_Recv(&message, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+
+
+
+if (world_rank == 0) {
+    printf("\n\nBIT Level");
     printf("\nPropagate: ");
     print_binary_array(propagate, elements_per_proc);
     printf("\nGenerate:  ");
@@ -281,8 +365,28 @@ void carry_lookahead_adder(int* A, int* B, int c_in, int elements_per_proc, int 
     printf("\n");
     print_binary_array(result, elements_per_proc);
     printf("\n\n");
+}
+
+
+    if (world_rank == 0) {
+	message = 1;
+	MPI_Send(&message, 1, MPI_INT, 1, 0, MPI_COMM_WORLD);
+    }
+
+
+
 #endif
 
+/*
+    free(propagate);
+    free(generate);
+    free(group_propagate);
+    free(group_generate);
+    free(section_propagate);
+    free(section_generate);
+    free(super_section_propagate);
+    free(super_section_generate);
+*/
 }
 
 // ARRAY TO HEX STRING ===================================================================
@@ -369,10 +473,14 @@ void next_level_P_and_G(int* propagate_next, int* generate_next, int* p, int* g,
 
 // TOP LEVEL CARRY ===================================================================
 /* Calculate the carry at the top level (e.g. super section)                        */
-void top_level_carry(int* p, int* g, int* carry_in, int size, int block){
+void top_level_carry(int* p, int* g, int* carry_in, int size, int block,
+                     int* gpc_prev, int world_rank) {
 
     // Never carry in to the first bit
-    carry_in[0] = 0;
+    if (world_rank == 0)
+        carry_in[0] = 0;
+    else  // determine the carry from the previous process
+        carry_in[0] = gpc_prev[0] || (gpc_prev[1] && gpc_prev[2]);
 
     for (int i = 1; i < size/block; i++){
         carry_in[i] = g[i-1]  ||  (p[i-1] && carry_in[i-1]);
@@ -381,16 +489,31 @@ void top_level_carry(int* p, int* g, int* carry_in, int size, int block){
 
 // LOWER LEVEL CARRY =================================================================
 /* Calculate the carry for any level that is not the top level                      */
-void lower_level_carry(int* p, int* g, int* carry_in, int* group_carry, int size, int block){
+void lower_level_carry(int* p, int* g, int* carry_in, int* group_carry, int size,
+                       int block, int* gpc_prev, int world_rank) {
+
+    // Never carry in to the first bit
+    if (world_rank == 0)
+        carry_in[0] = 0;
+    else  // determine the carry from the previous process
+        carry_in[0] = gpc_prev[0] || (gpc_prev[1] && gpc_prev[2]);
+
+
+    //if (world_rank == 0) printf("\n\ncarry[0] = %d", carry_in[0]);
+
     for (int j = 0; j < size/block; j++){
         carry_in[4*j+1] = g[4*j]  ||  (p[4*j] && group_carry[j]);
+	//if (world_rank == 0) printf("\n%d = %d + %d*%d", carry_in[4*j+1], g[4*j], p[4*j], group_carry[j]);
+
 
         for (int i = 1; i < 4; i++){
             carry_in[4*j+i+1] = g[4*j+i]  ||  (p[4*j+i] && carry_in[4*j+i]);
+	    //if (world_rank == 0) printf("\n%d = %d + %d*%d", carry_in[4*j+i+1], g[4*j+i], p[4*j+i], carry_in[4*j+i]);
         }
+	//if (world_rank == 0) printf("\n");
     }
-    // Never carry into the first bit
-    carry_in[0] = 0;
+
+    if (world_rank == 0) print_binary_array(carry_in, size);
 }
 
 
