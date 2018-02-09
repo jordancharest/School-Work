@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 
 typedef struct board_position {
     unsigned int x;
@@ -37,7 +38,7 @@ position_t find_open_space(int** board, position_t knight) {
     int x = knight.x;
     int y = knight.y;
                                                                     // 2 spaces | 1 space
-    if (x+2<cols  &&  y+1<rows  &&  board[x+2][y+1] == 0) {         //   right -> up
+    if        (x+2<cols  &&  y+1<rows  &&  board[x+2][y+1] == 0) {  //   right -> up
         space.x = x+2;
         space.y = y+1;
     } else if (x+2<cols  &&  y-1>=0    &&  board[x+2][y-1] == 0) {  //   right -> down
@@ -63,13 +64,50 @@ position_t find_open_space(int** board, position_t knight) {
         space.y = y-2;
     }
 
+    board[space.x][space.y] = 1;
     return space;
 }
 
 // REAP CHILDREN =================================================================================
 /* Gather data from all children to determine if a tour was completed                           */
-void reap_children(int* pipes, int read_fd, int children) {
+void reap_children(int* pipes, int read_index, int write_index, int children, pid_t master_pid) {
+    //printf("\nPID %d: REAPING CHILDREN\n", getpid());
+    int status;
+    int child_path;
+    int max_path = 0;
+    int bytes_read;
+    int bytes_written;
+    pid_t child_pid;
 
+    while (children > 0) {
+        child_pid = wait(&status);
+        children--;
+        if ( WIFSIGNALED(status) ){
+            fprintf( stderr, "ERROR: child process %d terminated abnormally\n", child_pid );  /* core dump or kill or kill -9 */
+            exit(EXIT_FAILURE);
+        }
+
+        bytes_read = read(pipes[read_index], &child_path, sizeof(child_path));
+        if(bytes_read != sizeof(child_path)){
+            fprintf(stderr, "ERROR: write() failed");
+            exit(EXIT_FAILURE);
+        }
+        printf("PID %d: Received %d from child - FD: %d\n", getpid(), child_path, pipes[write_index]);
+        if (child_path > max_path) max_path = child_path;
+
+        if (children == 0 && master_pid != getpid()){
+            bytes_written = write( pipes[write_index], &max_path, sizeof(max_path));
+            if(bytes_written != sizeof(max_path)){
+                fprintf(stderr, "ERROR: write() failed");
+                exit(EXIT_FAILURE);
+            }
+            printf("PID %d: All child processes terminated; sent %d on pipe to parent - FD: %d\n", getpid(), max_path, pipes[read_index]);
+        }
+    }
+
+    if (master_pid == getpid()) {
+        printf("PID %d: Best solution found visits %d squares (out of %d)\n", master_pid, max_path, available_spaces);
+    }
 }
 
 
@@ -79,33 +117,42 @@ void take_the_tour(int** board) {
     int visited = 1;
     int attempts = 0;
     int children = 0;
+    int total_children = 0;
     position_t knight = {0,0};
     position_t next = {0,0};
 
     pid_t pid_rc;
     int pipes[80];      // whole lotta pipes
-    int read_fd = 0;    // each process should save its read file descriptor from the array of pipes
-    int write_fd = 1;
+    int read_index = 0;    // each process should save its read file descriptor from the array of pipes
+    int write_index = 1;
+    int bytes_written;
+
+    pid_t master_pid = getpid();
 
     // knights have at most eight legal moves
     while (attempts < 8) {
         // on the first attempt, output number of possible moves and set up pipe for all children
         if (attempts == 0) {
             num_possible_moves(board, knight, visited);
-            int rc = pipe( pipes + read_fd );
+            int rc = pipe( pipes + read_index );
             if ( rc == -1 ) {
                 perror( "pipe() failed" );
                 exit(EXIT_FAILURE);
             }
-            close(pipes[read_fd+1]);    // parent will never write to the pipe
-            read_fd += 2;               // prepare for next pipe creation
         }
 
         next = find_open_space(board, knight);
         if (next.x == 0 && next.y == 0) {
-            printf("PID %d: Dead end after move #%d\n", getpid(), visited);
-            printf("PID %d: Sent %d on pipe to parent", getpid(), visited);
-            write( pipes[write_fd], &visited, sizeof(visited));
+            if (getpid() != master_pid) {
+                printf("PID %d: Dead end after move #%d\n", getpid(), visited);
+                printf("PID %d: Sent %d on pipe to parent - FD: %d\n", getpid(), visited, pipes[write_index]);
+                bytes_written = write( pipes[write_index], &visited, sizeof(visited));
+
+                if(bytes_written != sizeof(visited)){
+                    fprintf(stderr, "ERROR: write() failed");
+                    exit(EXIT_FAILURE);
+                }
+            }
             break;
 
         // legal move found, let another process explore it
@@ -118,27 +165,29 @@ void take_the_tour(int** board) {
             }
 
             if (pid_rc == 0) {          /* CHILD PROCESS */
-                write_fd += 2;          // child writes to a different pipe than the parent
+                read_index += 2;        // child reads from and writes to a different pipe than the parent
                 knight.x = next.x;      // update the knights location
                 knight.y = next.y;
                 attempts = 0;
+                children = 0;
+                total_children++;
                 visited++;
+                if (total_children >= 2) write_index += 2;
 
             } else {                    /* PARENT PROCESS */
-                printf("PID %d: Child proces created\n", getpid());
+                printf("PID %d: child - %d\n", getpid(), pid_rc);
                 children++;
-
-
+                attempts++;
             }
 
 
         }
 
 
-        attempts++;
+
     }
 
-    reap_children(pipes, read_fd, children);
+    reap_children(pipes, read_index, write_index, children, master_pid);
 }
 
 // MATRIX ALLOCATION =============================================================================
@@ -162,6 +211,18 @@ int** matrix_alloc() {
     return array;
 }
 
+// MATRIX FREE =================================================================================
+void matrix_free( int **matrix){
+    // free each pointer in the array
+    for (int i = 0; i < rows; i++){
+        free(matrix[i]);
+    }
+
+    // then free the array of pointers
+    free(matrix);
+    matrix = NULL;
+}
+
 
 
 
@@ -173,7 +234,9 @@ int main(int argc, char** argv){
         fprintf(stderr, "ERROR: Invalid argument(s)\n");
         fprintf(stderr, "USAGE: %s <rows> <columns>\n", argv[0]);
         return EXIT_FAILURE;
-    } else if (atoi(argv[1]) > 4 || atoi(argv[2]) > 4) {
+    }
+
+    if (atoi(argv[1]) > 4 || atoi(argv[2]) > 4) {
         fprintf(stderr, "ERROR: Too expensive\n");
         return EXIT_FAILURE;
     }
@@ -189,8 +252,7 @@ int main(int argc, char** argv){
     board[0][0] = 1;
 
     take_the_tour(board);
-    free(board);
-    board = NULL;
+    matrix_free(board);
 
     return EXIT_SUCCESS;
 }
