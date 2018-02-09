@@ -68,6 +68,9 @@ position_t find_open_space(int** board, position_t knight) {
 
 // REAP CHILDREN =================================================================================
 /* Gather data from all children to determine if a tour was completed                           */
+void reap_children(int* pipes, int read_fd, int children) {
+
+}
 
 
 
@@ -82,24 +85,27 @@ void take_the_tour(int** board) {
     pid_t pid_rc;
     int pipes[80];      // whole lotta pipes
     int read_fd = 0;    // each process should save its read file descriptor from the array of pipes
+    int write_fd = 1;
 
     // knights have at most eight legal moves
     while (attempts < 8) {
         // on the first attempt, output number of possible moves and set up pipe for all children
         if (attempts == 0) {
             num_possible_moves(board, knight, visited);
-            int rc = pipe( pipes[read_fd] );
+            int rc = pipe( pipes + read_fd );
             if ( rc == -1 ) {
                 perror( "pipe() failed" );
                 exit(EXIT_FAILURE);
             }
             close(pipes[read_fd+1]);    // parent will never write to the pipe
-            read_fd += 2;
+            read_fd += 2;               // prepare for next pipe creation
         }
 
         next = find_open_space(board, knight);
         if (next.x == 0 && next.y == 0) {
             printf("PID %d: Dead end after move #%d\n", getpid(), visited);
+            printf("PID %d: Sent %d on pipe to parent", getpid(), visited);
+            write( pipes[write_fd], &visited, sizeof(visited));
             break;
 
         // legal move found, let another process explore it
@@ -112,13 +118,14 @@ void take_the_tour(int** board) {
             }
 
             if (pid_rc == 0) {          /* CHILD PROCESS */
-                knight.x = next.x;
+                write_fd += 2;          // child writes to a different pipe than the parent
+                knight.x = next.x;      // update the knights location
                 knight.y = next.y;
                 attempts = 0;
                 visited++;
 
             } else {                    /* PARENT PROCESS */
-                printf("PID %d: Child proces created\n");
+                printf("PID %d: Child proces created\n", getpid());
                 children++;
 
 
@@ -131,8 +138,7 @@ void take_the_tour(int** board) {
         attempts++;
     }
 
-    reap_children(pipes[read_fd], children);
-
+    reap_children(pipes, read_fd, children);
 }
 
 // MATRIX ALLOCATION =============================================================================
@@ -167,7 +173,7 @@ int main(int argc, char** argv){
         fprintf(stderr, "ERROR: Invalid argument(s)\n");
         fprintf(stderr, "USAGE: %s <rows> <columns>\n", argv[0]);
         return EXIT_FAILURE;
-    } else if (argv[1] > 4 || argv[2] > 4) {
+    } else if (atoi(argv[1]) > 4 || atoi(argv[2]) > 4) {
         fprintf(stderr, "ERROR: Too expensive\n");
         return EXIT_FAILURE;
     }
