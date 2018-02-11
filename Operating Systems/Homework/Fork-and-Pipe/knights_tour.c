@@ -268,7 +268,7 @@ int main(int argc, char** argv){
         return EXIT_FAILURE;
     }
 
-    if (atoi(argv[1]) > 6 || atoi(argv[2]) > 6) {
+    if (atoi(argv[1]) * atoi(argv[2]) > 20) {
         fprintf(stderr, "ERROR: Too expensive\n");
         return EXIT_FAILURE;
     }
