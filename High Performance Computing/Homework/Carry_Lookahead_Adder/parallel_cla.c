@@ -4,10 +4,10 @@
 #include <string.h>
 #include <math.h>
 
-#define HEX_DIGITS 64
+#define HEX_DIGITS 262144
 #define BITS HEX_DIGITS*4
-#define BLOCK_SIZE 4
-
+#define BLOCK_SIZE 16
+FILE* file;
 
 // FUNCTION DECLARATIONS ===================================
 void user_input(int* binary_array);
@@ -23,12 +23,13 @@ void lower_level_carry(int* p, int* g, int* carry_in, int* group_carry, int size
 void carry_lookahead_adder(int* num1, int* num2, int* A, int* B, int c_in, int elements_per_proc, int world_rank, int world_size);
 void array_to_hex_string(int* array);
 void sum(int* result, int* A, int* B, int* carry_in, int c_in, int size);
-
+void ripple_adder(int* A, int* B, int c_in);
 
 // MAIN ====================================================
-int main()
-{
+int main(int argc, char** argv) {
+
     MPI_Init(NULL, NULL);
+    double start = MPI_Wtime();
     // Get the number of processes
     int world_size;
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
@@ -37,19 +38,21 @@ int main()
     int world_rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
-    // Get the name of the processor
-    char processor_name[MPI_MAX_PROCESSOR_NAME];
-    int name_len;
-    MPI_Get_processor_name(processor_name, &name_len);
+    int* A = (int*)malloc(BITS * sizeof(int));
+    int* B = (int*)malloc(BITS * sizeof(int));
 
-    int A[BITS] = {0};
-    int B[BITS] = {0};
+    file = fopen(argv[1], "r");
+    if (file == NULL){
+        perror ("ERROR: fopen() failed");
+        exit(EXIT_FAILURE);
+    }
+
     if (world_rank == 0) {
-	printf("\nRank 0...reading user input");
-    	// Get two hex numbers to add, convert to binary arrays
+	// Get two hex numbers to add, convert to binary arrays
     	user_input(A);
     	user_input(B);
     }
+    MPI_Barrier(MPI_COMM_WORLD);
 
     int c_in = 0;
 
@@ -67,7 +70,11 @@ int main()
     }
 #endif
 
-    /* need to dynamically allocate sub_arrays based on numper of processors (MPI_Comm_size())*/
+#ifdef RIPPLE // performance study purposes
+    ripple_adder(A,B,c_in);
+#else
+
+    /* need to dynamically allocate sub_arrays based on number of processors (MPI_Comm_size())*/
     int elements_per_proc = BITS/world_size;
     int* sub_A = malloc(sizeof(int) * elements_per_proc);
     int* sub_B = malloc(sizeof(int) * elements_per_proc);
@@ -77,7 +84,18 @@ int main()
 
     carry_lookahead_adder(A, B, sub_A, sub_B, c_in, elements_per_proc, world_rank, world_size);
 
-    // Finalize the MPI environment.
+    free(sub_A);
+    free(sub_B);
+    if (world_rank == 0) {
+        free(A);
+        free(B);
+    }
+#endif
+
+#ifdef TIME
+    printf("Time: %f\n", (MPI_Wtime() - start));
+#endif
+
     MPI_Finalize();
 
     return EXIT_SUCCESS;
@@ -86,13 +104,13 @@ int main()
 // USER INPUT ========================================================================
 /* Prompt the user for (or scan from file) a hex string, then convert the string
     to an array of 1's and 0's (binary array)                                       */
-void user_input(int* binary_array){
+void user_input(int* binary_array) {
 
     //printf("\n\nPlease enter a %d-digit (%d-bit) hexadecimal number:\n", HEX_DIGITS, BITS);
-    char hex[HEX_DIGITS] = {0};
-    scanf("%s", hex);
+    char* hex = (char*)malloc(HEX_DIGITS * sizeof(char)+1);
+    fscanf(file, "%s", hex);
 
-    //printf("You entered: %s\n", hex);
+    //printf("\n\n\nYou entered: %s\n", hex);
     //printf("The equivalent binary is:\n");
 
     int i = 0;
@@ -142,13 +160,14 @@ void user_input(int* binary_array){
                 add_bits(binary_array, i, 1,1,1,0); break;
             case 'f':
                 add_bits(binary_array, i, 1,1,1,1); break;
-            default:
-                printf("\n Invalid hex digit %c\n", hex[i]);
+            //default:
+                //printf("\n Invalid hex digit %c\n", hex[i]);
         }
 
         ++i;
     }
     //print_binary_array(binary_array, BITS);
+    free(hex);
 }
 
 
@@ -192,11 +211,14 @@ void carry_lookahead_adder(int* num1, int* num2, int* A, int* B, int c_in,
         MPI_Irecv(gpc_bit, 3, MPI_INT, world_rank-1, 0, MPI_COMM_WORLD, &request_bit);
     }
 
-
     int block = 1;
     int* propagate = malloc(sizeof(int) * elements_per_proc);
     int* generate = malloc(sizeof(int) * elements_per_proc);
     bit_level_p_and_g(propagate, generate, A, B, elements_per_proc);
+
+#ifdef BARRIER
+    MPI_Barrier(MPI_COMM_WORLD);
+#endif
 
     // GROUP: Divide into 4 groups, calculate propagate and generate functions for each group
     int* group_propagate = malloc(sizeof(int) * elements_per_proc / BLOCK_SIZE);
@@ -204,6 +226,9 @@ void carry_lookahead_adder(int* num1, int* num2, int* A, int* B, int c_in,
     block *= BLOCK_SIZE;
     next_level_P_and_G(group_propagate, group_generate, propagate, generate, elements_per_proc, block);
 
+#ifdef BARRIER
+    MPI_Barrier(MPI_COMM_WORLD);
+#endif
 
     // SECTION
     int* section_propagate = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,2));
@@ -211,6 +236,9 @@ void carry_lookahead_adder(int* num1, int* num2, int* A, int* B, int c_in,
     block *= BLOCK_SIZE;
     next_level_P_and_G(section_propagate, section_generate, group_propagate, group_generate, elements_per_proc, block);
 
+#ifdef BARRIER
+    MPI_Barrier(MPI_COMM_WORLD);
+#endif
 
     // SUPER SECTION
     int* super_section_propagate = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,3));
@@ -218,6 +246,9 @@ void carry_lookahead_adder(int* num1, int* num2, int* A, int* B, int c_in,
     block *= BLOCK_SIZE;
     next_level_P_and_G(super_section_propagate, super_section_generate, section_propagate, section_generate, elements_per_proc, block);
 
+#ifdef BARRIER
+    MPI_Barrier(MPI_COMM_WORLD);
+#endif
 
     // SUPER SECTION: head back down to bit level, calculating the carry-in along the way
     int* super_section_carry = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,3));
@@ -233,7 +264,6 @@ void carry_lookahead_adder(int* num1, int* num2, int* A, int* B, int c_in,
 
         MPI_Isend(gen_prop_carry, 3, MPI_INT, world_rank+1, 0, MPI_COMM_WORLD,  &request);
     }
-
 
     // SECTION
     int* section_carry = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,2));
@@ -260,8 +290,8 @@ void carry_lookahead_adder(int* num1, int* num2, int* A, int* B, int c_in,
     // Prepare and send generate, propagate, and carry to next process
     if (world_rank != (world_size-1)) {
         gen_prop_carry[0] = group_generate[elements_per_proc/block - 1];
-        gen_prop_carry[1] = section_propagate[elements_per_proc/block - 1];
-        gen_prop_carry[2] = section_carry[elements_per_proc/block - 1];
+        gen_prop_carry[1] = group_propagate[elements_per_proc/block - 1];
+        gen_prop_carry[2] = group_carry[elements_per_proc/block - 1];
 
         MPI_Isend(gen_prop_carry, 3, MPI_INT, world_rank+1, 0, MPI_COMM_WORLD,  &request);
     }
@@ -271,14 +301,7 @@ void carry_lookahead_adder(int* num1, int* num2, int* A, int* B, int c_in,
     int* carry_in = malloc(sizeof(int) * elements_per_proc);
 
     if (world_rank > 0) MPI_Wait(&request_bit, MPI_STATUS_IGNORE);
-    if (world_rank == 0) printf("\n\n\nCALCULATE BIT LEVEL CARRY IN - PROCESS ZERO\n");
     lower_level_carry(propagate, generate, carry_in, group_carry, elements_per_proc, block, gpc_bit, world_rank);
-
-    if (world_rank == 0) {
-	printf("\n");
-	print_binary_array(carry_in, elements_per_proc);
-    }
-
 
     // Prepare and send generate, propagate, and carry to next process
     if (world_rank != (world_size-1)) {
@@ -292,23 +315,11 @@ void carry_lookahead_adder(int* num1, int* num2, int* A, int* B, int c_in,
 
 
     // CALCULATE RESULT
-    int total_carry[BITS] = {0};
-
-    if (world_rank == 0) {
-	printf("\n");
-	print_binary_array(carry_in, elements_per_proc);
-    }
+    int* total_carry = malloc(BITS * sizeof(int));
 
     MPI_Gather(carry_in, elements_per_proc, MPI_INT, total_carry, elements_per_proc, MPI_INT, 0, MPI_COMM_WORLD);
 
-    if (world_rank == 0) {
-	printf("\n");
-	print_binary_array(carry_in, elements_per_proc);
-    }
-
-
-
-    int result[BITS] = {0};
+    int* result = malloc(BITS * sizeof(int));
     if (world_rank == 0) {
         sum(result, num1, num2, total_carry, c_in, BITS);
         array_to_hex_string(result);
@@ -321,9 +332,7 @@ void carry_lookahead_adder(int* num1, int* num2, int* A, int* B, int c_in,
 	MPI_Recv(&message, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
 
-
-
-if (world_rank == 0) {
+ // if (world_rank == 0) {
     printf("\n\nBIT Level");
     printf("\nPropagate: ");
     print_binary_array(propagate, elements_per_proc);
@@ -366,19 +375,15 @@ if (world_rank == 0) {
     printf("\n");
     print_binary_array(result, elements_per_proc);
     printf("\n\n");
-}
+  //}
 
 
     if (world_rank == 0) {
 	message = 1;
 	MPI_Send(&message, 1, MPI_INT, 1, 0, MPI_COMM_WORLD);
     }
-
-
-
 #endif
 
-/*
     free(propagate);
     free(generate);
     free(group_propagate);
@@ -387,14 +392,15 @@ if (world_rank == 0) {
     free(section_generate);
     free(super_section_propagate);
     free(super_section_generate);
-*/
+    free(total_carry);
+    free(result);
 }
 
 // ARRAY TO HEX STRING ===================================================================
 /* Converts a binary array back to a hex string for output                              */
 void array_to_hex_string(int* array){
 
-    char hex[HEX_DIGITS+1];
+    char* hex = malloc(HEX_DIGITS);
     hex[HEX_DIGITS] = '\0';
 
     char temp[5];
@@ -428,7 +434,8 @@ void array_to_hex_string(int* array){
         else if (strcmp(temp, "1111") == 0) hex[HEX_DIGITS-i] = 'F';
     }
 
-    printf("\nHex Result:  %s\n", hex);
+    //printf("%s\n", hex);
+    //fflush(stdout);
 }
 
 // INVERT ARRAY ======================================================================
@@ -499,22 +506,13 @@ void lower_level_carry(int* p, int* g, int* carry_in, int* group_carry, int size
     else  // determine the carry from the previous process
         carry_in[0] = gpc_prev[0] || (gpc_prev[1] && gpc_prev[2]);
 
-
-    //if (world_rank == 0) printf("\n\ncarry[0] = %d", carry_in[0]);
-
     for (int j = 0; j < size/block; j++){
         carry_in[4*j+1] = g[4*j]  ||  (p[4*j] && group_carry[j]);
-	//if (world_rank == 0) printf("\n%d = %d + %d*%d", carry_in[4*j+1], g[4*j], p[4*j], group_carry[j]);
-
 
         for (int i = 1; i < 4; i++){
             carry_in[4*j+i+1] = g[4*j+i]  ||  (p[4*j+i] && carry_in[4*j+i]);
-	    //if (world_rank == 0) printf("\n%d = %d + %d*%d", carry_in[4*j+i+1], g[4*j+i], p[4*j+i], carry_in[4*j+i]);
         }
-	//if (world_rank == 0) printf("\n");
     }
-
-    if (world_rank == 0) print_binary_array(carry_in, size);
 }
 
 
@@ -526,3 +524,21 @@ void sum(int* result, int* A, int* B, int* carry_in, int c_in, int size){
         result[i] = A[i] ^ B[i] ^ carry_in[i];
 }
 
+
+// RIPPLE ADDER ========================================================================
+void ripple_adder(int* A, int* B, int c_in) {
+
+    int carry = c_in;
+    int* result = (int*)malloc(BITS * sizeof(int));
+    for (int i = 0; i < BITS; i++) {
+        result[i] = A[i] ^ B[i] ^ carry;
+
+        if ((A[i] && B[i]) || (A[i] && carry) || (B[i] && carry))
+            carry = 1;
+        else
+            carry = 0;
+
+    }
+
+    array_to_hex_string(result);
+}
