@@ -7,7 +7,8 @@
 #define HEX_DIGITS 262144
 #define BITS HEX_DIGITS*4
 #define BLOCK_SIZE 16
-FILE* file;
+FILE* input_file;
+FILE* output_file;
 
 // FUNCTION DECLARATIONS ===================================
 void user_input(int* binary_array);
@@ -41,17 +42,22 @@ int main(int argc, char** argv) {
     int* A = (int*)malloc(BITS * sizeof(int));
     int* B = (int*)malloc(BITS * sizeof(int));
 
-    file = fopen(argv[1], "r");
-    if (file == NULL){
-        perror ("ERROR: fopen() failed");
-        exit(EXIT_FAILURE);
-    }
-
     if (world_rank == 0) {
-	// Get two hex numbers to add, convert to binary arrays
+	if ((input_file = fopen(argv[1], "r") == NULL){
+            perror ("ERROR: fopen() failed");
+            exit(EXIT_FAILURE);
+        }
+
+        if ((output_file = fopen(argv[2], "w") == NULL){
+            perror ("ERROR: fopen() failed");
+            exit(EXIT_FAILURE);
+        }
+
+        // Get two hex numbers to add, convert to binary arrays
     	user_input(A);
     	user_input(B);
     }
+
     MPI_Barrier(MPI_COMM_WORLD);
 
     int c_in = 0;
@@ -89,12 +95,16 @@ int main(int argc, char** argv) {
     if (world_rank == 0) {
         free(A);
         free(B);
+        fclose(input_file);
+        fclose(output_file);
     }
+
 #endif
 
 #ifdef TIME
     printf("Time: %f\n", (MPI_Wtime() - start));
 #endif
+
 
     MPI_Finalize();
 
@@ -400,13 +410,13 @@ void carry_lookahead_adder(int* num1, int* num2, int* A, int* B, int c_in,
 /* Converts a binary array back to a hex string for output                              */
 void array_to_hex_string(int* array){
 
-    char* hex = malloc(HEX_DIGITS);
+    char* hex = malloc(HEX_DIGITS+1);
     hex[HEX_DIGITS] = '\0';
 
     char temp[5];
     temp[4] = '\0';
 
-    for(int i = (HEX_DIGITS); i > 0; i--){
+    for(int i = HEX_DIGITS; i > 0; i--){
         // get next four binary digits
         for (int j = 0; j <= 3; j++){
             if (array[4*i-j-1]){
@@ -434,8 +444,8 @@ void array_to_hex_string(int* array){
         else if (strcmp(temp, "1111") == 0) hex[HEX_DIGITS-i] = 'F';
     }
 
-    //printf("%s\n", hex);
-    //fflush(stdout);
+    fprintf(output_file,"%s\n", hex);
+    fflush(stdout);
 }
 
 // INVERT ARRAY ======================================================================
