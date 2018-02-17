@@ -6,7 +6,7 @@
 
 #define HEX_DIGITS 262144
 #define BITS HEX_DIGITS*4
-#define BLOCK_SIZE 16
+#define BLOCK_SIZE 4
 FILE* input_file;
 FILE* output_file;
 
@@ -30,7 +30,7 @@ void ripple_adder(int* A, int* B, int c_in);
 int main(int argc, char** argv) {
 
     MPI_Init(NULL, NULL);
-    double start = MPI_Wtime();
+    //double start = MPI_Wtime();
     // Get the number of processes
     int world_size;
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
@@ -43,17 +43,17 @@ int main(int argc, char** argv) {
     int* B = (int*)malloc(BITS * sizeof(int));
 
     if (world_rank == 0) {
-	if ((input_file = fopen(argv[1], "r") == NULL){
+	if ((input_file = fopen(argv[1], "r")) == NULL){
             perror ("ERROR: fopen() failed");
             exit(EXIT_FAILURE);
         }
 
-        if ((output_file = fopen(argv[2], "w") == NULL){
+        if ((output_file = fopen(argv[2], "w")) == NULL){
             perror ("ERROR: fopen() failed");
             exit(EXIT_FAILURE);
         }
 
-        // Get two hex numbers to add, convert to binary arrays
+	// Get two hex numbers to add, convert to binary arrays
     	user_input(A);
     	user_input(B);
     }
@@ -95,8 +95,8 @@ int main(int argc, char** argv) {
     if (world_rank == 0) {
         free(A);
         free(B);
-        fclose(input_file);
-        fclose(output_file);
+	fclose(input_file);
+	fclose(output_file);
     }
 
 #endif
@@ -118,7 +118,7 @@ void user_input(int* binary_array) {
 
     //printf("\n\nPlease enter a %d-digit (%d-bit) hexadecimal number:\n", HEX_DIGITS, BITS);
     char* hex = (char*)malloc(HEX_DIGITS * sizeof(char)+1);
-    fscanf(file, "%s", hex);
+    fscanf(input_file, "%s", hex);
 
     //printf("\n\n\nYou entered: %s\n", hex);
     //printf("The equivalent binary is:\n");
