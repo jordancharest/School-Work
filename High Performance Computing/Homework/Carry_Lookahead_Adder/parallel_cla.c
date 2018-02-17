@@ -53,11 +53,12 @@ int main(int argc, char** argv) {
             exit(EXIT_FAILURE);
         }
 
-	// Get two hex numbers to add, convert to binary arrays
+        // Get two hex numbers to add, convert to binary arrays
     	user_input(A);
     	user_input(B);
     }
 
+    // don't allow other ranks to attempt calculations until the numbers are input
     MPI_Barrier(MPI_COMM_WORLD);
 
     int c_in = 0;
@@ -80,7 +81,7 @@ int main(int argc, char** argv) {
     ripple_adder(A,B,c_in);
 #else
 
-    /* need to dynamically allocate sub_arrays based on number of processors (MPI_Comm_size())*/
+    // all arrays need to be dynamically allocated since they are larger than the stack
     int elements_per_proc = BITS/world_size;
     int* sub_A = malloc(sizeof(int) * elements_per_proc);
     int* sub_B = malloc(sizeof(int) * elements_per_proc);
@@ -214,6 +215,7 @@ void carry_lookahead_adder(int* num1, int* num2, int* A, int* B, int c_in,
     MPI_Request request_group;
     MPI_Request request_bit;
 
+    // world rank 0 does only sends, the last world rank only receives
     if (world_rank > 0) {
         MPI_Irecv(gpc_top, 3, MPI_INT, world_rank-1, 0, MPI_COMM_WORLD, &request_top);
         MPI_Irecv(gpc_section, 3, MPI_INT, world_rank-1, 0, MPI_COMM_WORLD, &request_section);
@@ -230,7 +232,7 @@ void carry_lookahead_adder(int* num1, int* num2, int* A, int* B, int c_in,
     MPI_Barrier(MPI_COMM_WORLD);
 #endif
 
-    // GROUP: Divide into 4 groups, calculate propagate and generate functions for each group
+    // GROUP: Divide into groups, calculate propagate and generate functions for each group
     int* group_propagate = malloc(sizeof(int) * elements_per_proc / BLOCK_SIZE);
     int* group_generate = malloc(sizeof(int) * elements_per_proc / BLOCK_SIZE);
     block *= BLOCK_SIZE;
@@ -324,7 +326,7 @@ void carry_lookahead_adder(int* num1, int* num2, int* A, int* B, int c_in,
 
 
 
-    // CALCULATE RESULT
+    // CALCULATE RESULT using bit level propagate, generate, and carry
     int* total_carry = malloc(BITS * sizeof(int));
 
     MPI_Gather(carry_in, elements_per_proc, MPI_INT, total_carry, elements_per_proc, MPI_INT, 0, MPI_COMM_WORLD);
@@ -335,62 +337,63 @@ void carry_lookahead_adder(int* num1, int* num2, int* A, int* B, int c_in,
         array_to_hex_string(result);
     }
 
-#ifdef DEBUG_MODE
 
+
+#ifdef DEBUG_MODE
     int message;
     if (world_rank == 1)
 	MPI_Recv(&message, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
 
- // if (world_rank == 0) {
-    printf("\n\nBIT Level");
-    printf("\nPropagate: ");
-    print_binary_array(propagate, elements_per_proc);
-    printf("\nGenerate:  ");
-    print_binary_array(generate, elements_per_proc);
-    printf("\nCarry:     ");
-    print_binary_array(carry_in, elements_per_proc);
+    if (world_rank == 0) {
+        printf("\n\nBIT Level");
+        printf("\nPropagate: ");
+        print_binary_array(propagate, elements_per_proc);
+        printf("\nGenerate:  ");
+        print_binary_array(generate, elements_per_proc);
+        printf("\nCarry:     ");
+        print_binary_array(carry_in, elements_per_proc);
 
-    printf("\n\nGROUP Level");
-    printf("\nPropagate: ");
-    print_binary_array(group_propagate, elements_per_proc/4);
-    printf("\nGenerate:  ");
-    print_binary_array(group_generate, elements_per_proc/4);
-    printf("\nCarry:     ");
-    print_binary_array(group_carry, elements_per_proc/4);
+        printf("\n\nGROUP Level");
+        printf("\nPropagate: ");
+        print_binary_array(group_propagate, elements_per_proc/4);
+        printf("\nGenerate:  ");
+        print_binary_array(group_generate, elements_per_proc/4);
+        printf("\nCarry:     ");
+        print_binary_array(group_carry, elements_per_proc/4);
 
-    printf("\n\nSECTION Level");
-    printf("\nPropagate: ");
-    print_binary_array(section_propagate, elements_per_proc/16);
-    printf("\nGenerate:  ");
-    print_binary_array(section_generate, elements_per_proc/16);
-    printf("\nCarry:     ");
-    print_binary_array(section_carry, elements_per_proc/16);
+        printf("\n\nSECTION Level");
+        printf("\nPropagate: ");
+        print_binary_array(section_propagate, elements_per_proc/16);
+        printf("\nGenerate:  ");
+        print_binary_array(section_generate, elements_per_proc/16);
+        printf("\nCarry:     ");
+        print_binary_array(section_carry, elements_per_proc/16);
 
-    printf("\n\nSUPER SECTION Level");
-    printf("\nPropagate: ");
-    print_binary_array(super_section_propagate, elements_per_proc/64);
-    printf("\nGenerate:  ");
-    print_binary_array(super_section_generate, elements_per_proc/64);
-    printf("\nCarry:     ");
-    print_binary_array(super_section_carry, elements_per_proc/64);
+        printf("\n\nSUPER SECTION Level");
+        printf("\nPropagate: ");
+        print_binary_array(super_section_propagate, elements_per_proc/64);
+        printf("\nGenerate:  ");
+        print_binary_array(super_section_generate, elements_per_proc/64);
+        printf("\nCarry:     ");
+        print_binary_array(super_section_carry, elements_per_proc/64);
 
 
-    printf("\n\nSUM\n");
-    print_binary_array(A, elements_per_proc);
-    printf("\n");
-    print_binary_array(B, elements_per_proc);
-    printf("\n");
-    print_binary_array(carry_in, elements_per_proc);
-    printf("\n");
-    print_binary_array(result, elements_per_proc);
-    printf("\n\n");
-  //}
+        printf("\n\nSUM\n");
+        print_binary_array(A, elements_per_proc);
+        printf("\n");
+        print_binary_array(B, elements_per_proc);
+        printf("\n");
+        print_binary_array(carry_in, elements_per_proc);
+        printf("\n");
+        print_binary_array(result, elements_per_proc);
+        printf("\n\n");
+    }
 
 
     if (world_rank == 0) {
-	message = 1;
-	MPI_Send(&message, 1, MPI_INT, 1, 0, MPI_COMM_WORLD);
+        message = 1;
+        MPI_Send(&message, 1, MPI_INT, 1, 0, MPI_COMM_WORLD);
     }
 #endif
 
@@ -535,7 +538,9 @@ void sum(int* result, int* A, int* B, int* carry_in, int c_in, int size){
 }
 
 
-// RIPPLE ADDER ========================================================================
+// RIPPLE ADDER ======================================================================
+/* Calculate the carry as you go for performance study purposes (no potential for
+    parallelization)                                                                */
 void ripple_adder(int* A, int* B, int c_in) {
 
     int carry = c_in;
@@ -543,6 +548,7 @@ void ripple_adder(int* A, int* B, int c_in) {
     for (int i = 0; i < BITS; i++) {
         result[i] = A[i] ^ B[i] ^ carry;
 
+        // calculate carry
         if ((A[i] && B[i]) || (A[i] && carry) || (B[i] && carry))
             carry = 1;
         else
