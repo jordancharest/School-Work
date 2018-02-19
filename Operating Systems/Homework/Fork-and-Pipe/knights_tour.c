@@ -13,6 +13,7 @@ typedef struct board_position {
 int available_spaces = 0;
 int rows = 0;
 int cols = 0;
+
 // PRINT BOARD ===================================================================================
 void print_board(int** board) {
     for (int i = 0; i < rows; i++) {
@@ -28,19 +29,18 @@ void print_board(int** board) {
 // DEAD END ======================================================================================
 void dead_end(int* pipes, int write_index, int visited) {
     int bytes_written = write( pipes[write_index], &visited, sizeof(visited));
-    printf("PID %d: Dead end after move #%d\n", getpid(), visited);
-    printf("PID %d: Sent %d on pipe to parent\n", getpid(), visited);
-
     if (bytes_written != sizeof(visited)) {
         fprintf(stderr, "ERROR: write() failed");
         exit(EXIT_FAILURE);
     }
+
+    printf("PID %d: Dead end after move #%d\n", getpid(), visited);
+    printf("PID %d: Sent %d on pipe to parent\n", getpid(), visited);
+
     #ifdef DISPLAY_BOARD
         print_board(board);
     #endif
 }
-
-
 
 // NUMBER OF POSSIBLE MOVES ======================================================================
 int num_possible_moves(int** board, position_t* available_moves, position_t knight, int visited) {
@@ -49,10 +49,7 @@ int num_possible_moves(int** board, position_t* available_moves, position_t knig
     int y = knight.y;
     position_t space = {0,0};
 
-    //printf("\nx: %d   y: %d", x, y);
-    //printf("\nrows: %d,   cols: %d\n", rows, cols);
-
-                                                             // 2 spaces | 1 space
+    // Check 8 valid board locations                            2 spaces | 1 space
     if (x+2<cols  &&  y+1<rows  &&  board[y+1][x+2] == 0) {  //   right -> up
         space.x = x+2;
         space.y = y+1;
@@ -123,24 +120,27 @@ void reap_children(int* pipes, int read_index, int write_index, int children, pi
     pid_t child_pid;
 
     while (children > 0) {
-        child_pid = wait(&status);
+        child_pid = wait(&status);  // no need to attempt a read if no children have terminated yet
         children--;
+
         if ( WIFSIGNALED(status) ){
             fprintf( stderr, "ERROR: child process %d terminated abnormally\n", child_pid );  /* core dump or kill or kill -9 */
             exit(EXIT_FAILURE);
         }
 
         bytes_read = read(pipes[read_index], &child_path, sizeof(child_path));
-        if(bytes_read != sizeof(child_path)){
+        if (bytes_read != sizeof(child_path)){
             fprintf(stderr, "ERROR: write() failed");
             exit(EXIT_FAILURE);
         }
         printf("PID %d: Received %d from child\n", getpid(), child_path);
-        if (child_path > max_path) max_path = child_path;
+        if (child_path > max_path)
+            max_path = child_path;
 
+        // if you aren't the master process(and didn't hit a dead end), send your path length to your parent
         if (children == 0 && master_pid != getpid()){
             bytes_written = write( pipes[write_index], &max_path, sizeof(max_path));
-            if(bytes_written != sizeof(max_path)){
+            if (bytes_written != sizeof(max_path)){
                 fprintf(stderr, "ERROR: write() failed");
                 exit(EXIT_FAILURE);
             }
@@ -148,14 +148,15 @@ void reap_children(int* pipes, int read_index, int write_index, int children, pi
         }
     }
 
+    // Master process has read from all children, output result
     if (master_pid == getpid()) {
         printf("PID %d: Best solution found visits %d squares (out of %d)\n", master_pid, max_path, available_spaces);
     }
 }
 
 
-
 // TAKE THE TOUR =================================================================================
+/* Knights tour control function                                                                */
 void take_the_tour(int** board) {
     int visited = 1;
     int moves = 0;
@@ -167,9 +168,9 @@ void take_the_tour(int** board) {
     position_t available_moves[8] = {0};
 
     pid_t pid_rc;
-    int pipes[80];      // whole lotta pipes
-    int read_index = 0;    // each process should save its read file descriptor from the array of pipes
-    int write_index = -1;
+    int pipes[80];          // whole lotta pipes
+    int read_index = 0;     // each process should save its read file descriptor from the array of pipes
+    int write_index = -1;   // same for write
 
     pid_t master_pid = getpid();
 
@@ -185,10 +186,12 @@ void take_the_tour(int** board) {
             }
         }
 
+        // no moves found
         if (moves == 0) {
             dead_end(pipes, write_index, visited);
             break;
 
+        // make a move, but don't fork
         } else if (moves == 1) {
             knight.x = available_moves[0].x;
             knight.y = available_moves[0].y;
@@ -198,8 +201,8 @@ void take_the_tour(int** board) {
             board[knight.y][knight.x] = 1;
 
 
-
-        } else {    // multiple moves
+        // multiple moves, fork for each move
+        } else {
             for (int i = 0; i < moves; i++) {
                 pid_rc = fork();
                 if ( pid_rc == -1 ) {
@@ -207,10 +210,11 @@ void take_the_tour(int** board) {
                     exit(EXIT_FAILURE);
                 }
 
-                if (pid_rc == 0) {          /* CHILD PROCESS */
-                    read_index += 2;        // child reads from and writes to a different pipe than the parent
+                /* CHILD PROCESS */
+                if (pid_rc == 0) {
+                    read_index += 2;    // child reads from and writes to a different pipe than the parent
                     write_index += 2;
-                    knight.x = available_moves[i].x;      // update the knights location
+                    knight.x = available_moves[i].x;    // update the knights location
                     knight.y = available_moves[i].y;
                     attempts = 0;
                     moves = 0;
@@ -218,7 +222,8 @@ void take_the_tour(int** board) {
                     parent = 0;
                     total_children++;
                     visited++;
-                    for (int i = 0; i < 8; i++) {   // clear the available moves array
+                    // clear the available moves array
+                    for (int i = 0; i < 8; i++) {
                         available_moves[i].x = 0;
                         available_moves[i].y = 0;
                     }
@@ -226,13 +231,16 @@ void take_the_tour(int** board) {
                     board[knight.y][knight.x] = 1;
                     break;
 
-                } else {                    /* PARENT PROCESS */
+                /* PARENT PROCESS */
+                } else {
                     children++;
                     attempts++;
                     parent = 1;
                 }
             }
         }
+
+        // Don't search for more moves, just wait for children to report their path lengths (reap children)
         if (parent == 1) break;
     }
 
@@ -256,8 +264,6 @@ int** matrix_alloc() {
             exit(EXIT_FAILURE);
         }
     }
-
-
 
     return array;
 }
