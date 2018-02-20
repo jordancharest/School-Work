@@ -1,9 +1,11 @@
 #include <iostream>
+#include <iomanip>
 #include <fstream>
 #include <string>
 #include <sstream>
 #include <vector>
 #include <list>
+#include <algorithm>
 #include <cstdlib>
 #include <cstdio>
 #include "process.h"
@@ -42,27 +44,51 @@ void parse_input(std::ifstream &InputStream, std::vector<Process> &processes) {
                         >> io_time;
 
             processes.push_back( Process(pid, arrival_time, burst_time, num_bursts, io_time) );
-
-            #ifdef DEBUG_MODE
-                std::cout   << processes[i].getPID()
-                            << delimiter
-                            << processes[i].getArrivalTime()
-                            << delimiter
-                            << processes[i].getBurstTime()
-                            << delimiter
-                            << processes[i].getNumBursts()
-                            << delimiter
-                            << processes[i].getIOTime()
-                            << std::endl;
-            #endif // DEBUG_MODE
             i++;
         }
     }
     total_processes = i;
 }
 
+// PROCESS ORDER =================================================================================
+void process_order(std::vector<Process> &processes) {
+    char delimiter = '|';
+    for (auto &proc : processes) {
+        std::cout   << proc.getPID()
+                    << delimiter
+                    << proc.getArrivalTime()
+                    << delimiter
+                    << proc.getBurstTime()
+                    << delimiter
+                    << proc.getNumBursts()
+                    << delimiter
+                    << proc.getIOTime()
+                    << std::endl;
+    }
+}
+
+// ARRIVAL SORT ==================================================================================
+bool arrival_sort(Process &a, Process &b) {
+    return (a.getArrivalTime() < b.getArrivalTime());
+}
+
+// OUTPUT STATS ==================================================================================
+void print_stats (stat_t &stats, std::ofstream &OutputStream) {
+    OutputStream << "Algorithm " << stats.algorithm << "\n" << std::fixed << std::setprecision(2)
+                 << "-- average CPU burst time: " << stats.avg_burst_time << " ms\n"
+                 << "-- average wait time: " << stats.avg_wait_time << " ms\n"
+                 << "-- average turnaround time: " << stats.avg_turnaround_time << " ms\n"
+                 << "-- total number of context switches: " << stats.num_context_switches << "\n"
+                 << "-- total number of preemptions: " << stats.num_preemptions << std::endl;
+}
+
 // MAIN ==========================================================================================
 int main(int argc, char* argv[]){
+
+    if (argc != 3) {
+        std::cerr << "USAGE: " << argv[0] << "<input-file> <output-file>\n";
+        return EXIT_FAILURE;
+    }
 
     std::ifstream InputStream(argv[1]);
     if (!InputStream.good()){
@@ -70,15 +96,29 @@ int main(int argc, char* argv[]){
         return EXIT_FAILURE;
     }
 
+    std::ofstream OutputStream(argv[2]);
+    if (!OutputStream.good()){
+        std::cerr << "Can't open " << argv[2] << " to read.\n";
+        return EXIT_FAILURE;
+    }
+
     std::vector<Process> processes;
     parse_input(InputStream, processes);
+    std::sort(processes.begin(), processes.end(), arrival_sort);
     InputStream.close();
 
-    // Run three different scheduling simulations
-    First_Come_First_Serve(processes);
-    Shortest_Remaining_Time(processes);
-    Round_Robin(processes);
+#ifdef DEBUG_MODE
+    process_order(processes);
+#endif
 
+    // Run three different scheduling simulations
+    stat_t FCFS_stats = First_Come_First_Serve(processes);
+    stat_t SRT_stats = Shortest_Remaining_Time(processes);
+    stat_t RR_stats = Round_Robin(processes);
+
+    print_stats(FCFS_stats, OutputStream);
+    print_stats(SRT_stats, OutputStream);
+    print_stats(RR_stats, OutputStream);
 
     return EXIT_SUCCESS;
 }

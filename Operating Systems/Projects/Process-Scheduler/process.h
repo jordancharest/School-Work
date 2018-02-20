@@ -8,13 +8,21 @@
 #define T_CS 8  // time needed for a context switch
 extern int total_processes;
 
-// not technically needed in this implementation, used for extensibility
 enum class Status {
     READY,      // ready to use the CPU
     RUNNING,    // actively using the CPU
     BLOCKED,    // blocked on I/O
     TERMINATED
 };
+
+typedef struct simulation_statistics {
+    std::string algorithm;
+    float avg_burst_time = 0;
+    float avg_wait_time = 0;
+    float avg_turnaround_time = 0;
+    int num_context_switches = 1; // count the context switch needed to start the first process
+    int num_preemptions = 0;
+} stat_t;
 
 
 // PROCESS CLASS =================================================================================
@@ -29,14 +37,19 @@ public:
     const long getArrivalTime() const { return arrival_time; }
     const int getBurstTime() const { return burst_time; }
     const int getNumBursts() const { return num_bursts; }
-    const long getIOTime() const { return io_time; }
+    const int getIOTime() const { return io_time; }
     const Status getStatus() const { return s; }
-    const long endBurstTime() const { return (start_time + burst_time); }
-    const long endIOTime() const { return (start_time + io_time); }
+    const int getStartTime() const { return start_time; }
+    const int endBurstTime() const { return (start_time + burst_time); }
+    const int endIOTime() const { return (start_time + io_time); }
 
     // Modifiers
     void decrementNumBursts() { num_bursts--; }
     void setAsTERMINATED() { s = Status::TERMINATED; }
+    void setAsREADY(int time) {
+        ready_time = time;
+        s = Status::READY;
+    }
     void setAsRUNNING(int time) {
         start_time = time;
         s = Status::RUNNING;
@@ -48,24 +61,25 @@ public:
 
 private:
     char pid;
-    long arrival_time;
+    int arrival_time;
     int burst_time;
     int num_bursts;
     int io_time;
-    long start_time = 0;
+    int start_time = 0; // used for both CPU bursts and IO blocks
+    int ready_time = 0; // the time the process was last added to the ready queue
     Status s = Status::READY;
 };
 
 
 
 // FUNCTION DECLARATIONS =========================================================================
-void First_Come_First_Serve(std::vector<Process> &processes);
-void Shortest_Remaining_Time(std::vector<Process> &processes);
-void Round_Robin(std::vector<Process> &processes);
+stat_t First_Come_First_Serve(std::vector<Process> &processes);
+stat_t Shortest_Remaining_Time(std::vector<Process> &processes);
+stat_t Round_Robin(std::vector<Process> &processes);
 
 std::string queue_contents(std::list<Process> &process_queue);
 void process_arrival(std::list<Process> &ready_queue, Process &proc, int time);
-void process_start(std::list<Process> &ready_queue, Process &running, int time);
+void process_start(std::list<Process> &ready_queue, Process &proc, int time);
 void process_block(std::list<Process> &ready_queue, std::list<Process> &IO_blocked, Process &proc, int time);
 void process_finished_IO(std::list<Process> &ready_queue, std::list<Process> &IO_blocked, int time);
 void process_termination(std::list<Process> &ready_queue, Process &proc, int time);
