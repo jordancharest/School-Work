@@ -30,13 +30,14 @@ class Process {
 public:
     // Constructor
     Process(char _pid, int _a_time, int _b_time, int _num_b, int _io) :
-        pid(_pid), arrival_time(_a_time), burst_time(_b_time), num_bursts(_num_b), io_time(_io) {}
+        pid(_pid), arrival_time(_a_time), burst_time(_b_time), num_bursts(_num_b), total_bursts(_num_b), io_time(_io) {}
 
     // Accessors
     const char getPID() const { return pid; }
     const long getArrivalTime() const { return arrival_time; }
     const int getBurstTime() const { return burst_time; }
     const int getNumBursts() const { return num_bursts; }
+    const int getTotalBursts() const { return total_bursts; }
     const int getIOTime() const { return io_time; }
     const Status getStatus() const { return s; }
     const int getStartTime() const { return start_time; }
@@ -64,6 +65,7 @@ private:
     int arrival_time;
     int burst_time;
     int num_bursts;
+    int total_bursts;
     int io_time;
     int start_time = 0; // used for both CPU bursts and IO blocks
     int ready_time = 0; // the time the process was last added to the ready queue

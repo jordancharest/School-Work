@@ -70,8 +70,15 @@ stat_t First_Come_First_Serve(std::vector<Process> &processes) {
             CPU_available = running.endBurstTime() + T_CS;
 
             if (running.getNumBursts() == 0) {
+                // stats collection
                 stats.avg_turnaround_time += (time - running.getArrivalTime());
+                std::cout << time << " - " << running.getArrivalTime() << " - (" << running.getTotalBursts() << " * " << running.getBurstTime() << ") - (" << running.getTotalBursts() << " * " << T_CS << ")\n";
+                stats.avg_wait_time += ((time - running.getArrivalTime())                       // total up time
+                                        - (running.getTotalBursts() * running.getBurstTime())   // total execution time
+                                        - ((running.getTotalBursts()) * T_CS));                 // total time caught in a context switch
+
                 process_termination(ready_queue, running, time);
+
             } else {
                 process_block(ready_queue, IO_blocked, running, time);
             }
@@ -88,11 +95,6 @@ stat_t First_Come_First_Serve(std::vector<Process> &processes) {
     // Calculate statistics
     stats.avg_burst_time = (float) total_burst_time/num_bursts;
     stats.avg_turnaround_time /= total_processes;
-    for (auto &proc : processes) {
-        stats.avg_wait_time += ((proc.endBurstTime() - proc.getArrivalTime())   // total up time
-                                - (proc.getNumBursts() * proc.getBurstTime())   // total execution time
-                                - ((proc.getNumBursts()) * T_CS));              // total time caught in a context switch
-    }
     stats.avg_wait_time /= total_processes;
 
     time += (T_CS/2 - 1);   // allow time for context switch
