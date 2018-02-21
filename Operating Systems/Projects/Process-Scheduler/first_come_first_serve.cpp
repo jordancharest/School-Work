@@ -72,7 +72,6 @@ stat_t First_Come_First_Serve(std::vector<Process> &processes) {
             if (running.getNumBursts() == 0) {
                 // stats collection
                 stats.avg_turnaround_time += (time - running.getArrivalTime());
-                std::cout << time << " - " << running.getArrivalTime() << " - (" << running.getTotalBursts() << " * " << running.getBurstTime() << ") - (" << running.getTotalBursts() << " * " << T_CS << ")\n";
                 stats.avg_wait_time += ((time - running.getArrivalTime())                       // total up time
                                         - (running.getTotalBursts() * running.getBurstTime())   // total execution time
                                         - ((running.getTotalBursts()) * T_CS));                 // total time caught in a context switch
