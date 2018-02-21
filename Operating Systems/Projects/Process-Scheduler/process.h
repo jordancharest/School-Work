@@ -41,11 +41,14 @@ public:
     const int getIOTime() const { return io_time; }
     const Status getStatus() const { return s; }
     const int getStartTime() const { return start_time; }
+    const int endRemainingTime() const { return (start_time + remaining_time); }
     const int endBurstTime() const { return (start_time + burst_time); }
     const int endIOTime() const { return (start_time + io_time); }
+    bool wasPreempted() const { return preempted; }
 
     // Modifiers
     void decrementNumBursts() { num_bursts--; }
+    void contAfterPreemption() { preempted = false; }
     void setAsTERMINATED() { s = Status::TERMINATED; }
     void setAsREADY(int time) {
         ready_time = time;
@@ -59,6 +62,10 @@ public:
         start_time = time + T_CS/2;
         s = Status::BLOCKED;
     }
+    void preempt(int time) {
+        preempted = true;
+        remaining_time = start_time + burst_time - time;
+    }
 
 private:
     char pid;
@@ -69,6 +76,8 @@ private:
     int io_time;
     int start_time = 0; // used for both CPU bursts and IO blocks
     int ready_time = 0; // the time the process was last added to the ready queue
+    int remaining_time = 0; // time remaining in CPU burst after a preemption
+    bool preempted = false;
     Status s = Status::READY;
 };
 
@@ -85,7 +94,6 @@ void process_start(std::list<Process> &ready_queue, Process &proc, int time);
 void process_block(std::list<Process> &ready_queue, std::list<Process> &IO_blocked, Process &proc, int time);
 void process_finished_IO(std::list<Process> &ready_queue, std::list<Process> &IO_blocked, int time);
 void process_termination(std::list<Process> &ready_queue, Process &proc, int time);
-
 
 
 

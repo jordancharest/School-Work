@@ -6,7 +6,7 @@
 #include "process.h"
 
 // IO SORT COMPARATOR ============================================================================
-bool IO_sort(Process a, Process b) {
+bool IO_sort(Process &a, Process &b) {
     return (a.endIOTime() < b.endIOTime());
 }
 

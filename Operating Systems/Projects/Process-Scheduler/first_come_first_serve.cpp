@@ -10,7 +10,6 @@
 /* Control function for first come first serve simulator                                        */
 stat_t First_Come_First_Serve(std::vector<Process> &processes) {
 
-
     stat_t stats;
     stats.num_preemptions = 0;
     stats.algorithm = "FCFS";
