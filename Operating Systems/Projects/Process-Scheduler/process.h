@@ -29,6 +29,7 @@ typedef struct simulation_statistics {
 class Process {
 public:
     // Constructor
+    Process() : pid('?'), arrival_time(0), burst_time(0), num_bursts(0), total_bursts(0), io_time(0) {}
     Process(char _pid, int _a_time, int _b_time, int _num_b, int _io) :
         pid(_pid), arrival_time(_a_time), burst_time(_b_time), num_bursts(_num_b), total_bursts(_num_b), io_time(_io) {}
 
@@ -48,7 +49,7 @@ public:
 
     // Modifiers
     void decrementNumBursts() { num_bursts--; }
-    void contAfterPreemption() { preempted = false; }
+    void noLongerPreempted() { preempted = false; }
     void setAsTERMINATED() { s = Status::TERMINATED; }
     void setAsREADY(int time) {
         ready_time = time;
@@ -63,8 +64,12 @@ public:
         s = Status::BLOCKED;
     }
     void preempt(int time) {
-        preempted = true;
-        remaining_time = start_time + burst_time - time;
+        if (this->preempted)
+            remaining_time = start_time + remaining_time - time;
+        else {
+            remaining_time = start_time + burst_time - time;
+            preempted = true;
+        }
     }
 
 private:
@@ -90,7 +95,9 @@ stat_t Round_Robin(std::vector<Process> &processes);
 
 std::string queue_contents(std::list<Process> &process_queue);
 void process_arrival(std::list<Process> &ready_queue, Process &proc, int time);
+void preempt_on_arrival(std::list<Process> &ready_queue, Process &arriving, Process &running, int time);
 void process_start(std::list<Process> &ready_queue, Process &proc, int time);
+void process_finished_burst(std::list<Process> &ready_queue, std::list<Process> &IO_blocked, Process &proc, int* CPU_available, stat_t* stats, int time);
 void process_block(std::list<Process> &ready_queue, std::list<Process> &IO_blocked, Process &proc, int time);
 void process_finished_IO(std::list<Process> &ready_queue, std::list<Process> &IO_blocked, int time);
 void process_termination(std::list<Process> &ready_queue, Process &proc, int time);

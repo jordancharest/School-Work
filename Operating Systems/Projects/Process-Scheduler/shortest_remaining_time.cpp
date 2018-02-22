@@ -37,6 +37,7 @@ stat_t Shortest_Remaining_Time(std::vector<Process> &processes) {
 
 
     bool preemption = false;
+    Process preempting_process;
     int CPU_available = 0;
     int context_counter = 0;
     int num_bursts = 1;
@@ -45,29 +46,19 @@ stat_t Shortest_Remaining_Time(std::vector<Process> &processes) {
 
     while (next < total_processes  ||  ready_queue.size() > 0  ||  IO_blocked.size() > 0  ||  running.getStatus() == Status::RUNNING) {
 
-        // check if any processes are arriving
-        if (processes[next].getArrivalTime() == time) {
-            process_arrival(ready_queue, processes[next], time);
-            ready_queue.sort(SRT_sort);
-
-            if (ready_queue.front().getBurstTime() < (running.endBurstTime() - time)) {
-                preemption = true;
-            }
-
-            next++;
-        }
-
         // preempt the currently running process
         if (preemption) {
             if (context_counter == 0) {
-                running.preempt(time);
+                running.preempt(time-1);    // preemption actually occurred last ms
                 ready_queue.push_back(running);
                 ready_queue.sort(SRT_sort);
+
+                running = preempting_process;
             }
             context_counter++;
 
+            // context switch is completed
             if (context_counter >= T_CS) {
-                running = ready_queue.front();
                 process_start(ready_queue, running, time);
                 context_counter = 0;
                 preemption = false;
@@ -86,73 +77,53 @@ stat_t Shortest_Remaining_Time(std::vector<Process> &processes) {
             }
 
         // check if the current running process is done using the CPU (don't check for this if a preemption is occurring)
-        } else if (running.getStatus() == Status::RUNNING  &&  running.endBurstTime() == time) {
-            // stats collection
-            total_burst_time += (time - running.getStartTime());
-            stats.num_context_switches++;
-
-            running.decrementNumBursts();
-            CPU_available = running.endBurstTime() + T_CS;
-
-            if (running.getNumBursts() == 0) {
-                // stats collection
-                stats.avg_turnaround_time += (time - running.getArrivalTime());
-                stats.avg_wait_time += ((time - running.getArrivalTime())                       // total up time
-                                        - (running.getTotalBursts() * running.getBurstTime())   // total execution time
-                                        - ((running.getTotalBursts()) * T_CS));                 // total time caught in a context switch
-
-                process_termination(ready_queue, running, time);
-
-            } else {
-                process_block(ready_queue, IO_blocked, running, time);
-            }
-
+        // or
         // check if a previously preempted process is done using the CPU
-        } else if (running.wasPreempted()  &&  running.getStatus() == Status::RUNNING  &&  running.endRemainingTime() == time){
-            // stats collection
+        } else if ((running.getStatus() == Status::RUNNING  &&  (running.endBurstTime() == time))
+                    || (running.wasPreempted()  &&  running.getStatus() == Status::RUNNING  &&  running.endRemainingTime() == time)){
             total_burst_time += (time - running.getStartTime());
-            stats.num_context_switches++;
+            process_finished_burst(ready_queue, IO_blocked, running, &CPU_available, &stats, time);
+        }
 
-            running.decrementNumBursts();
-            CPU_available = running.endBurstTime() + T_CS;
+        // check if any processes are arriving
+        if (processes[next].getArrivalTime() == time) {
+            if ((processes[next].getBurstTime() < (running.endBurstTime() - time))
+                || (processes[next].getBurstTime() < (running.endRemainingTime() - time)) ) {
 
-            if (running.getNumBursts() == 0) {
-                // stats collection
-                stats.avg_turnaround_time += (time - running.getArrivalTime());
-                stats.avg_wait_time += ((time - running.getArrivalTime())                       // total up time
-                                        - (running.getTotalBursts() * running.getBurstTime())   // total execution time
-                                        - ((running.getTotalBursts()) * T_CS));                 // total time caught in a context switch
-
-                process_termination(ready_queue, running, time);
+                preemption = true;
+                preempting_process = processes[next];
+                preempt_on_arrival(ready_queue, preempting_process, running, time);
 
             } else {
-                process_block(ready_queue, IO_blocked, running, time);
+                process_arrival(ready_queue, processes[next], time);
+                ready_queue.sort(SRT_sort);
             }
+
+            next++;
         }
 
         // check if any process is done IO
         if (IO_blocked.front().endIOTime() == time) {
-            process_finished_IO(ready_queue, IO_blocked, time);
-            ready_queue.sort(SRT_sort);
 
-            if (ready_queue.front().getBurstTime() < (running.endBurstTime() - time)) {
+            if ((IO_blocked.front().getBurstTime() < (running.endBurstTime() - time))
+                || (processes[next].getBurstTime() < (running.endRemainingTime() - time)) )  {
+
                 preemption = true;
+                preempting_process = IO_blocked.front();
+                std::cout << "time " << time << "ms: Process " << preempting_process.getPID()
+                          << " completed I/O and will preempt " << running.getPID() << " " << queue_contents(ready_queue) << "\n";
+                ready_queue.push_front(preempting_process);
+                IO_blocked.pop_front();
+            } else {
+                process_finished_IO(ready_queue, IO_blocked, time);
+                ready_queue.sort(SRT_sort);
             }
         }
 
         time++;
     }
 
-
-
-
-
-
-
-
-
+    time += (T_CS/2 - 1);   // allow time for context switch
     std::cout << "time " << time << "ms: Simulator ended for SRT\n" << std::endl;
     return stats;
-
-
 }
