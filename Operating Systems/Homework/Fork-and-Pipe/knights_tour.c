@@ -117,14 +117,15 @@ void reap_children(int* pipes, int read_index, int write_index, int children, pi
     int max_path = 0;
     int bytes_read;
     int bytes_written;
-    pid_t child_pid;
 
     while (children > 0) {
-        child_pid = wait(&status);  // no need to attempt a read if no children have terminated yet
+        #ifndef NO_PARALLEL
+            pid_t child_pid = wait(&status);  // no need to attempt a read if no children have terminated yet
+        #endif
         children--;
 
         if ( WIFSIGNALED(status) ){
-            fprintf( stderr, "ERROR: child process %d terminated abnormally\n", child_pid );  /* core dump or kill or kill -9 */
+            fprintf( stderr, "ERROR: child process terminated abnormally\n");  /* core dump or kill or kill -9 */
             exit(EXIT_FAILURE);
         }
 
@@ -205,6 +206,19 @@ void take_the_tour(int** board) {
         } else {
             for (int i = 0; i < moves; i++) {
                 pid_rc = fork();
+
+                #ifdef NO_PARALLEL
+                    if (pid_rc > 0) {
+                        int status;
+                        pid_t child_pid = wait(&status);
+
+                        if ( WIFSIGNALED(status) )  {
+                            fprintf( stderr, "ERROR: child process %d terminated abnormally\n", child_pid );  /* core dump or kill or kill -9 */
+                            exit(EXIT_FAILURE);
+                        }
+                    }
+                #endif
+
                 if ( pid_rc == -1 ) {
                     perror( "fork() failed" );
                     exit(EXIT_FAILURE);
@@ -301,7 +315,6 @@ int main(int argc, char** argv){
 
     int** board = matrix_alloc();
     printf("PID %d: Solving the knight's tour problem for a %dx%d board\n", getpid(), rows, cols);
-    print_board(board);
 
     // knight always starts in the top left corner
     board[0][0] = 1;
