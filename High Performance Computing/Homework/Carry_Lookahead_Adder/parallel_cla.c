@@ -206,11 +206,13 @@ void carry_lookahead_adder(int* num1, int* num2, int* A, int* B, int c_in,
 
     // Prepare to receive generates, propagates, and carries from previous processors
     int gpc_top[3] = {0};
+    int gpc_super_section[3] = {0};
     int gpc_section[3] = {0};
     int gpc_group[3] = {0};
     int gpc_bit[3] = {0};
     MPI_Request request;
     MPI_Request request_top;
+    MPI_Request request_super_section;
     MPI_Request request_section;
     MPI_Request request_group;
     MPI_Request request_bit;
@@ -218,6 +220,7 @@ void carry_lookahead_adder(int* num1, int* num2, int* A, int* B, int c_in,
     // world rank 0 does only sends, the last world rank only receives
     if (world_rank > 0) {
         MPI_Irecv(gpc_top, 3, MPI_INT, world_rank-1, 0, MPI_COMM_WORLD, &request_top);
+        MPI_Irecv(gpc_super_section, 3, MPI_INT, world_rank-1, 0, MPI_COMM_WORLD, &request_super_section);
         MPI_Irecv(gpc_section, 3, MPI_INT, world_rank-1, 0, MPI_COMM_WORLD, &request_section);
         MPI_Irecv(gpc_group, 3, MPI_INT, world_rank-1, 0, MPI_COMM_WORLD, &request_group);
         MPI_Irecv(gpc_bit, 3, MPI_INT, world_rank-1, 0, MPI_COMM_WORLD, &request_bit);
@@ -262,13 +265,38 @@ void carry_lookahead_adder(int* num1, int* num2, int* A, int* B, int c_in,
     MPI_Barrier(MPI_COMM_WORLD);
 #endif
 
-    // SUPER SECTION: head back down to bit level, calculating the carry-in along the way
-    int* super_section_carry = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,3));
+    // SUPER SUPER SECTION
+    int* super_super_section_propagate = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,4));
+    int* super_super_section_generate = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,4));
+    block *= BLOCK_SIZE;
+    next_level_P_and_G(super_super_section_propagate, super_super_section_generate, super_section_propagate, super_section_generate, elements_per_proc, block);
+
+#ifdef BARRIER
+    MPI_Barrier(MPI_COMM_WORLD);
+#endif
+
+    // SUPER SUPER SECTION: head back down to bit level, calculating the carry-in along the way
+    int* super_super_section_carry = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,4));
     if (world_rank > 0) MPI_Wait(&request_top, MPI_STATUS_IGNORE);
-    top_level_carry(super_section_propagate, super_section_generate, super_section_carry, elements_per_proc, block, gpc_top, world_rank);
+    top_level_carry(super_super_section_propagate, super_super_section_generate, super_super_section_carry, elements_per_proc, block, gpc_top, world_rank);
 
     // Prepare and send generate, propagate, and carry to next process
     int gen_prop_carry[3] = {0};
+    if (world_rank != (world_size-1)) {
+        gen_prop_carry[0] = super_super_section_generate[elements_per_proc/block - 1];
+        gen_prop_carry[1] = super_super_section_propagate[elements_per_proc/block - 1];
+        gen_prop_carry[2] = super_super_section_carry[elements_per_proc/block - 1];
+
+        MPI_Isend(gen_prop_carry, 3, MPI_INT, world_rank+1, 0, MPI_COMM_WORLD,  &request);
+    }
+
+    // SUPER SECTION: head back down to bit level, calculating the carry-in along the way
+    int* super_section_carry = malloc(sizeof(int) * elements_per_proc / pow(BLOCK_SIZE,3));
+    if (world_rank > 0) MPI_Wait(&request_super_section, MPI_STATUS_IGNORE);
+    lower_level_carry(super_section_propagate, super_section_generate, super_section_carry, super_super_section_carry, elements_per_proc, block, gpc_super_section, world_rank);
+    block /= BLOCK_SIZE;
+
+    // Prepare and send generate, propagate, and carry to next process
     if (world_rank != (world_size-1)) {
         gen_prop_carry[0] = super_section_generate[elements_per_proc/block - 1];
         gen_prop_carry[1] = super_section_propagate[elements_per_proc/block - 1];
