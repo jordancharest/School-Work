@@ -86,7 +86,7 @@ void print_stats (stat_t &stats, std::ofstream &OutputStream) {
 int main(int argc, char* argv[]){
 
     if (argc < 3 || argc > 4) {
-		std::cerr << "Invalid arguments\n";
+	std::cerr << "Invalid arguments\n";
         std::cerr << "USAGE: " << argv[0] << " <input-file> <stats-output-file> [<rr-add>]\n";
         return EXIT_FAILURE;
     }
@@ -103,17 +103,15 @@ int main(int argc, char* argv[]){
         return EXIT_FAILURE;
     }
 
-	char rr_add[10] = "END\0";
-
-	if (argc == 4) {		
-		if ( !(strcmp(argv[3], "END")==0 || strcmp(argv[3], "BEGINNING")==0) ) {
-			std::cerr << "Invalid arguments\n";
-			std::cerr << "USAGE: " << argv[0] << " <input-file> <stats-output-file> [<rr-add>]\n";
-			return EXIT_FAILURE;
-		}
-		else
-			sscanf(argv[3], "%s", rr_add);
-	}
+    char rr_add[10] = "END\0";
+    if (argc == 4) {		
+	if ( !(strcmp(argv[3], "END")==0 || strcmp(argv[3], "BEGINNING")==0) ) {
+	    std::cerr << "Invalid arguments\n";
+	    std::cerr << "USAGE: " << argv[0] << " <input-file> <stats-output-file> [<rr-add>]\n";
+		return EXIT_FAILURE;
+	} else
+	    sscanf(argv[3], "%s", rr_add);
+    }
 
     std::vector<Process> processes;
     parse_input(InputStream, processes);
@@ -125,12 +123,12 @@ int main(int argc, char* argv[]){
 #endif
 
     // Run three different scheduling simulations
-    //stat_t FCFS_stats = First_Come_First_Serve(processes);
-    //stat_t SRT_stats = Shortest_Remaining_Time(processes);
+    stat_t FCFS_stats = First_Come_First_Serve(processes);
+    stat_t SRT_stats = Shortest_Remaining_Time(processes);
     stat_t RR_stats = Round_Robin(processes, rr_add);
 
-    //print_stats(FCFS_stats, OutputStream);
-    //print_stats(SRT_stats, OutputStream);
+    print_stats(FCFS_stats, OutputStream);
+    print_stats(SRT_stats, OutputStream);
     print_stats(RR_stats, OutputStream);
 
     return EXIT_SUCCESS;
