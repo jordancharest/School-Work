@@ -89,7 +89,6 @@ private:
 };
 
 
-
 // FUNCTION DECLARATIONS =========================================================================
 stat_t First_Come_First_Serve(std::vector<Process> &processes);
 stat_t Shortest_Remaining_Time(std::vector<Process> &processes);
@@ -108,7 +107,6 @@ void process_finished_IO(std::list<Process> &ready_queue, std::list<Process> &IO
 void process_finished_IO_RR(std::list<Process> &ready_queue, std::list<Process> &IO_blocked, int time, char* rr_add);
 void preempt_after_IO(std::list<Process> &ready_queue, std::list<Process> &IO_blocked, Process &preempting, Process &running, int time);
 void process_termination(std::list<Process> &ready_queue, Process &proc, int time);
-
 
 
 #endif // PROCESS_H_INCLUDED

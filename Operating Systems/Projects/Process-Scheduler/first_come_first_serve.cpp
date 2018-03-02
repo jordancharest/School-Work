@@ -48,15 +48,10 @@ stat_t First_Come_First_Serve(std::vector<Process> &processes) {
             if (time >= CPU_available  && context_counter >= T_CS/2) {
                 running = ready_queue.front();
                 stats.avg_wait_time += (time - running.getReadyTime() - T_CS/2);
-                /*std::cout << "Process " << running.getPID() << " wait time: " << (time - running.getReadyTime() - T_CS/2) << "\n"
-                          << " total: " << stats.avg_wait_time << "\n";
-                */
-
-
-                process_start(ready_queue, running, time);
-
                 num_bursts++;
                 context_counter = 0;
+
+                process_start(ready_queue, running, time);
             }
         }
 

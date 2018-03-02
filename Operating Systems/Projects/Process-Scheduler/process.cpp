@@ -42,8 +42,6 @@ void calculate_stats(stat_t *stats, Process proc, int time) {
     if (stats->algorithm == "FCFS") {
         stats->avg_turnaround_time += (time - proc.getReadyTime());
     }
-
-
 }
 
 // PROCESS ARRIVAL ===============================================================================
@@ -161,7 +159,6 @@ void process_block(std::list<Process> &ready_queue, std::list<Process> &IO_block
               << proc.endIOTime() << "ms " << queue_contents(ready_queue)
               << "\n";
 }
-
 
 // PROCESS FINISHED IO ===========================================================================
 /* Handles process finishing IO block                                                           */
