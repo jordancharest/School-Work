@@ -2,9 +2,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define ARRAY_SIZE 100000
+#define ARRAY_SIZE 100
 
-
+long long sum_per_process(long long* array, int array_size);
 
 
 // MAIN ============================================================================================
@@ -19,10 +19,10 @@ int main(int argc, char** argv) {
     // Get the rank of the process
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
+    long long* array = NULL;
 
     if (rank == 0) {
-        ARRAY_T* array = malloc(ARRAY_SIZE * sizeof(ARRAY_T));
+        array = (long long*) malloc(ARRAY_SIZE * sizeof(long long));
         if (array == NULL) {
             fprintf(stderr, "ERROR: malloc() failed\n");
             exit(EXIT_FAILURE);
@@ -35,7 +35,8 @@ int main(int argc, char** argv) {
     }
 
     int elements_per_proc = ARRAY_SIZE/world_size;
-    int* sub_array = malloc(sizeof(MPI_LONG_LONG) * elements_per_proc);
+
+    long long* sub_array = (long long*) malloc(sizeof(long long) * elements_per_proc);
     if (sub_array == NULL) {
         fprintf(stderr, "ERROR: malloc() failed\n");
         exit(EXIT_FAILURE);
@@ -43,5 +44,31 @@ int main(int argc, char** argv) {
 
     MPI_Scatter(array, elements_per_proc, MPI_LONG_LONG, sub_array, elements_per_proc, MPI_LONG_LONG, 0, MPI_COMM_WORLD);
 
+    long long process_sum = sum_per_process(sub_array, elements_per_proc);
+    long long total_sum;
+    MPI_Reduce(&process_sum, &total_sum, 1, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+
+    if (rank == 0) {
+        printf("Sum: %lld\n", total_sum);
+    }
+
+
+
+
+    MPI_Finalize();
     return EXIT_SUCCESS;
+}
+
+
+
+// MAIN ============================================================================================
+// SUM PER PROCESS =================================================================================
+inline long long sum_per_process(long long* array, int array_size) {
+
+    long long sum = 0;
+    for (int i = 0; i < array_size; i++) {
+	sum += array[i];
+    }
+
+    return sum;
 }
