@@ -60,8 +60,6 @@ int main(int argc, char** argv) {
 }
 
 
-
-// MAIN ============================================================================================
 // SUM PER PROCESS =================================================================================
 inline long long sum_per_process(long long* array, int array_size) {
 
