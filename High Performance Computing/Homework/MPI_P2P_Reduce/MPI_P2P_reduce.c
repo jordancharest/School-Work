@@ -15,7 +15,6 @@ int main(int argc, char** argv) {
     const long long ACTUAL_SUM  = (0.5*(ARRAY_SIZE*ARRAY_SIZE) - 0.5*ARRAY_SIZE);
 
 
-
     // Get the number of processes and rank for each process
     int world_size;
     int rank;
@@ -98,29 +97,66 @@ long long MPI_P2P_reduce(long long* array, int array_size, int world_size, int r
     int receivers = 2;
     int num_receives = 0;
     int source = 0;
-    long long received_sum = 0;
+    long long* received_sum = malloc(total_reductions * sizeof(long long));
 
+	// Dynamic receives, different ranks receive a different number of times
     for (int i = 0;  i < total_reductions;  i++, receivers*=2) {
 		if (rank == 0  ||  (rank%receivers == 0 && rank >= receivers)) {
 	    	num_receives++;
 
-	    	if (i == 0)
-				source = rank+1;
-	    	else
-				source = rank + (i*2);
+	    	if (i == 0) source = rank+1;
+	    	else source = rank + (i*2);
 
-	    	MPI_Irecv(&received_sum, 1, MPI_LONG_LONG, source, 0, MPI_COMM_WORLD, (receive_requests + i));
+	    	MPI_Irecv((received_sum + i), 1, MPI_LONG_LONG, source, 0, MPI_COMM_WORLD, (receive_requests + i));
         } else
 	    	break;
     }
 
-    MPI_Barrier(MPI_COMM_WORLD);
-    printf("Process %d posted %d receives\n", rank, num_receives);
+
+    //MPI_Barrier(MPI_COMM_WORLD);
+    //printf("Process %d posted %d receives\n", rank, num_receives);
+
 
     long long process_sum = sum_per_process(array, array_size);
+	printf("Rank %d initial process sum: %lld\n", rank, process_sum);
 
-    long long total_sum = 0;
-    return total_sum;
+	// every process except for zero posts one send
+	int destination = 0;
+	int dest_found = 0;
+	int modifier = 2;
+	int num_sends = 0;
+	int i = 0;
+	MPI_Request send_request;
+
+	if (rank > 0) {
+		while (!dest_found) {
+			if (rank % modifier != 0) {
+				if (i == 0) destination = rank-1;
+				else destination = rank - i*2;
+
+				dest_found = 1;
+				num_sends++;
+			}
+
+			i++;
+			modifier *= 2;
+		}
+	}
+
+	printf("Rank %d must wait for %d sums\n", rank, num_receives);
+	for (int j = 0; j < num_receives; j++) {
+		MPI_Wait((receive_requests + j), MPI_STATUS_IGNORE);
+		process_sum += received_sum[j];
+		printf("Rank %d received %lld, new sum is %lld\n", rank, received_sum[j], process_sum);
+	}
+
+	if (rank > 0)
+		MPI_Isend(&process_sum, 1, MPI_LONG_LONG, destination, 0, MPI_COMM_WORLD,  &send_request);
+
+
+	//printf("Process %d posted %d send to Process %d\n", rank, num_sends, destination);
+
+    return process_sum;
 }
 
 
