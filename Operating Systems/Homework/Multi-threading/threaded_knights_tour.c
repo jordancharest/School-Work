@@ -30,6 +30,22 @@ pthread_t masters_children[8];
 pthread_t master_thread = 0;
 
 
+// PRINT BOARD ===================================================================================
+void print_board(int** board) {
+    for (int i = 0; i < rows; i++) {
+        printf("THREAD %u:", (unsigned int)pthread_self());
+        if (i == 0)
+            printf(" > ");
+        else
+            printf("   ");
+
+        for (int j = 0; j < cols; j++) {
+            if (board[i][j]) printf("k");
+            else printf(".");
+        }
+        printf("\n");
+    }
+}
 
 // MATRIX ALLOCATION =============================================================================
 /* allocate an array of pointers to ints, then allocate a row/array of ints and assign each
@@ -162,28 +178,24 @@ void populate_board(int** new_board, int** old_board) {
 /* Knights tour control function                                                                */
 void* take_the_tour(void* args) {
 
-
-    printf("THREAD %u is entering take_the_tour\n", (unsigned int)pthread_self());
-
     TA_t* thread_args = (TA_t*)args;
 
     int visited = thread_args->visited;
-    position_t knight = thread_args->current_move;
+    position_t knight;
+    knight.x = thread_args->current_move.x;
+    knight.y = thread_args->current_move.y;
+
+    //printf("THREAD %u: moving to space (%d, %d)\n", (unsigned int)pthread_self(), knight.x, knight.y);
 
     int** board = matrix_alloc();
     populate_board(board, thread_args->board);
     board[knight.y][knight.x] = 1;
 
 
-    printf("THREAD %u allocated a new game board\n", (unsigned int)pthread_self());
-
-
     pthread_t* tid = malloc(8 * sizeof(pthread_t));
     unsigned int moves = 0;
     unsigned int attempts = 0;
     position_t available_moves[8] = {0};
-
-
 
 
 
@@ -201,7 +213,6 @@ void* take_the_tour(void* args) {
 
         // make a move, but don't spawn a new thread
         } else if (moves == 1) {
-            printf("THREAD %u: One move detected\n", (unsigned int)pthread_self());
             knight.x = available_moves[0].x;
             knight.y = available_moves[0].y;
             attempts = 0;
@@ -214,27 +225,26 @@ void* take_the_tour(void* args) {
             if (master_thread == pthread_self())
                 num_children = moves;
 
+
+            TA_t* send_args = malloc(8 * sizeof(TA_t));
+
             for (int i = 0; i < moves; i++) {
-                printf("THREAD %u: creating thread #%d\n", (unsigned int)pthread_self(), i);
 
-                knight.x = available_moves[i].x;    // update the knights location
-                knight.y = available_moves[i].y;
+                //printf("THREAD %u: spawning child thread #%d to move to space (%d, %d)\n", (unsigned int)pthread_self(), i, available_moves[i].x, available_moves[i].y);
 
-                TA_t send_args;
-                send_args.board = board;
-                send_args.current_move = knight;
-                send_args.visited = visited+1;
-
-                TA_t* send_args_ptr = &send_args;
+                send_args[i].board = board;
+                send_args[i].current_move.x = available_moves[i].x;
+                send_args[i].current_move.y = available_moves[i].y;
+                send_args[i].visited = visited+1;
 
                 // New thread
-                if ( pthread_create( &tid[i], NULL, take_the_tour, (void*)&send_args_ptr ) != 0 ) {
+                if ( pthread_create( &tid[i], NULL, take_the_tour, (void*)&send_args[i] ) != 0 ) {
                     fprintf( stderr, "ERROR: Could not create thread\n" );
                     exit(EXIT_FAILURE);
                 }
             }
 
-            break;  // after creating new threads, nothing left to do
+            break;  // after creating new threads, nothing left to do (master thread will join all children in main())
         }
     }
 
@@ -244,6 +254,7 @@ void* take_the_tour(void* args) {
         pthread_exit( y );
     }
 
+    // only the master thread returns child thread IDs
     return tid;
 }
 
@@ -251,6 +262,10 @@ void* take_the_tour(void* args) {
 
 // MAIN ========================================================================================
 int main(int argc, char** argv){
+
+    setbuf(stdout, NULL);
+
+
 
     if (argc < 3 || argc > 4 || (argc == 4 && atoi(argv[3]) > atoi(argv[1])*atoi(argv[2])) ||  atoi(argv[1]) <= 2 || atoi(argv[2]) <= 2) {
         fprintf(stderr, "ERROR: Invalid argument(s)\n");
@@ -282,17 +297,21 @@ int main(int argc, char** argv){
     pthread_t* tid = take_the_tour((void*)&thread_args);
 
 
-    printf("THREAD %u: waiting for children to terminate\n", (unsigned int)pthread_self());
+    //printf("THREAD %u: waiting for children to terminate\n", (unsigned int)pthread_self());
     unsigned int * x;
     for (int i = 0; i < num_children; i++) {
-        printf("Joining one child\n");
         if (pthread_join( tid[i], (void **)&x )!= 0 )
             fprintf( stderr, "MAIN: Could not join thread\n");
-        else
-            printf("THREAD %u: joined child thread %u\n", (unsigned int)pthread_self(), *x);
     }
 
     printf("THREAD %u: All child threads joined\n", (unsigned int)pthread_self());
+    printf("THREAD %u: There are %d total dead end boards:\n", (unsigned int)pthread_self(), num_children);
+
+    for (int i = 0; i < num_children; i++) {
+        print_board(dead_end_boards[i]);
+    }
+
+
 
 
     matrix_free(initial_board);
