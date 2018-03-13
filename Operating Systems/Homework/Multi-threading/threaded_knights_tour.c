@@ -17,7 +17,7 @@ typedef struct thread_args {
 } TA_t;
 
 unsigned int max_squares = 0;
-int** dead_end_boards[80];
+int** dead_end_boards[2000];
 unsigned int index_DEB = 0;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -25,7 +25,6 @@ pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 unsigned int available_spaces = 0;
 unsigned int rows = 0;
 unsigned int cols = 0;
-unsigned int num_children = 0;
 pthread_t masters_children[8];
 pthread_t master_thread = 0;
 
@@ -95,6 +94,9 @@ void dead_end(int** board, int visited) {
             max_squares = visited;
     pthread_mutex_unlock(&mutex);
 
+    unsigned int * y = malloc( sizeof( unsigned int ) );
+    *y = pthread_self();
+    pthread_exit( y );
 }
 
 
@@ -195,7 +197,10 @@ void* take_the_tour(void* args) {
     pthread_t* tid = malloc(8 * sizeof(pthread_t));
     unsigned int moves = 0;
     unsigned int attempts = 0;
+    unsigned int num_children = 0;
     position_t available_moves[8] = {0};
+
+    TA_t* free_send_args = NULL;
 
 
 
@@ -208,8 +213,8 @@ void* take_the_tour(void* args) {
 
         // no moves found
         if (moves == 0) {
-            dead_end(board, visited);
-            break;
+            free(tid);
+            dead_end(board, visited);   // thread exits
 
         // make a move, but don't spawn a new thread
         } else if (moves == 1) {
@@ -222,9 +227,7 @@ void* take_the_tour(void* args) {
 
         // spawn threads to explore multiple moves
         } else {
-            if (master_thread == pthread_self())
-                num_children = moves;
-
+            num_children = moves;
 
             TA_t* send_args = malloc(8 * sizeof(TA_t));
 
@@ -244,17 +247,37 @@ void* take_the_tour(void* args) {
                 }
             }
 
-            break;  // after creating new threads, nothing left to do (master thread will join all children in main())
+            free_send_args = send_args;
+            break;  // after creating new threads, nothing left to do except wait for children
         }
     }
 
+
+    unsigned int * x;
+    for (int i = 0; i < num_children; i++) {
+        if (pthread_join( tid[i], (void **)&x )!= 0 )
+            fprintf( stderr, "MAIN: Could not join thread\n");
+
+        free(x);
+    }
+
+    if (moves > 1)
+        free(free_send_args);
+
+    // master thread still has more work to do
     if (pthread_self() != master_thread) {
+        if (num_children > 0)
+            matrix_free(board);
+
+
+        free(tid);
         unsigned int * y = malloc( sizeof( unsigned int ) );
         *y = pthread_self();
         pthread_exit( y );
     }
 
     // only the master thread returns child thread IDs
+    matrix_free(board);
     return tid;
 }
 
@@ -295,20 +318,14 @@ int main(int argc, char** argv){
     master_thread = pthread_self();
 
     pthread_t* tid = take_the_tour((void*)&thread_args);
+    free(tid);
 
+    printf("THREAD %u: Best solution found visits %u squares (out of %u)\n", (unsigned int)pthread_self(), max_squares, available_spaces);
 
-    //printf("THREAD %u: waiting for children to terminate\n", (unsigned int)pthread_self());
-    unsigned int * x;
-    for (int i = 0; i < num_children; i++) {
-        if (pthread_join( tid[i], (void **)&x )!= 0 )
-            fprintf( stderr, "MAIN: Could not join thread\n");
-    }
-
-    printf("THREAD %u: All child threads joined\n", (unsigned int)pthread_self());
-    printf("THREAD %u: There are %d total dead end boards:\n", (unsigned int)pthread_self(), num_children);
-
-    for (int i = 0; i < num_children; i++) {
-        print_board(dead_end_boards[i]);
+    printf("THREAD %u: There are %d total dead end boards:\n", (unsigned int)pthread_self(), index_DEB);
+    for (int i = 0; i < index_DEB; i++) {
+        //print_board(dead_end_boards[i]);
+        matrix_free(dead_end_boards[i]);
     }
 
 
