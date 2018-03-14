@@ -17,7 +17,8 @@ typedef struct thread_args {
 } TA_t;
 
 unsigned int max_squares = 0;
-int** dead_end_boards[2000];
+int*** dead_end_boards;
+unsigned int size_DEB = 8;
 unsigned int index_DEB = 0;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -80,19 +81,26 @@ void matrix_free( int **matrix){
 }
 
 
-
-
 // DEAD END ======================================================================================
 void dead_end(int** board, int visited) {
     printf("THREAD %u: Dead end after move #%d\n", (unsigned int)pthread_self(), visited);
 
+    /* ---------- CRITICAL ---------- */
     pthread_mutex_lock(&mutex);
+
+        if (index_DEB == size_DEB) {
+            size_DEB *= 2;
+            dead_end_boards = (int***)realloc( dead_end_boards, size_DEB * sizeof(int**) );
+        }
+
         dead_end_boards[index_DEB] = board;
         index_DEB++;
 
         if (visited > max_squares)
             max_squares = visited;
+
     pthread_mutex_unlock(&mutex);
+    /* ---------- CRITICAL ---------- */
 
     unsigned int * y = malloc( sizeof( unsigned int ) );
     *y = pthread_self();
@@ -157,7 +165,7 @@ int num_possible_moves(int** board, position_t* available_moves, position_t knig
         moves++;
     }
 
-    // Let user know we will be creating a new thread
+
     if (moves > 1) {
         printf("THREAD %u: %u moves possible after move #%u; creating threads\n",(unsigned int)pthread_self(), moves, visited);
         fflush(stdout);
@@ -177,18 +185,16 @@ void populate_board(int** new_board, int** old_board) {
 }
 
 // TAKE THE TOUR =================================================================================
-/* Knights tour control function                                                                */
+/* Knights tour control function  (thread function)                                             */
 void* take_the_tour(void* args) {
 
     TA_t* thread_args = (TA_t*)args;
-
     int visited = thread_args->visited;
     position_t knight;
     knight.x = thread_args->current_move.x;
     knight.y = thread_args->current_move.y;
 
-    //printf("THREAD %u: moving to space (%d, %d)\n", (unsigned int)pthread_self(), knight.x, knight.y);
-
+    // build a new board, populate with the already closed spaces, and close the new space
     int** board = matrix_alloc();
     populate_board(board, thread_args->board);
     board[knight.y][knight.x] = 1;
@@ -200,12 +206,11 @@ void* take_the_tour(void* args) {
     unsigned int num_children = 0;
     position_t available_moves[8] = {0};
 
-    TA_t* free_send_args = NULL;
-
-
+    TA_t* send_args = malloc(8 * sizeof(TA_t)); // arguments to send to possible child threads
 
     // knights have at most eight legal moves
     while (attempts < 8) {
+
         // on the first loop, search for possible moves and set up pipe for all children
         if (attempts == 0) {
             moves = num_possible_moves(board, available_moves, knight, visited);
@@ -229,12 +234,7 @@ void* take_the_tour(void* args) {
         } else {
             num_children = moves;
 
-            TA_t* send_args = malloc(8 * sizeof(TA_t));
-
             for (int i = 0; i < moves; i++) {
-
-                //printf("THREAD %u: spawning child thread #%d to move to space (%d, %d)\n", (unsigned int)pthread_self(), i, available_moves[i].x, available_moves[i].y);
-
                 send_args[i].board = board;
                 send_args[i].current_move.x = available_moves[i].x;
                 send_args[i].current_move.y = available_moves[i].y;
@@ -247,13 +247,13 @@ void* take_the_tour(void* args) {
                 }
             }
 
-            free_send_args = send_args;
-            break;  // after creating new threads, nothing left to do except wait for children
+            break;  // after creating new threads, stop searching and wait for children
         }
     }
 
 
-    unsigned int * x;
+    // Join child threads
+    unsigned int* x;
     for (int i = 0; i < num_children; i++) {
         if (pthread_join( tid[i], (void **)&x )!= 0 )
             fprintf( stderr, "MAIN: Could not join thread\n");
@@ -261,24 +261,22 @@ void* take_the_tour(void* args) {
         free(x);
     }
 
-    if (moves > 1)
-        free(free_send_args);
+    free(send_args);
+    free(tid);
 
-    // master thread still has more work to do
+    // master thread still has more work to do, all other threads exit
     if (pthread_self() != master_thread) {
         if (num_children > 0)
             matrix_free(board);
 
-
-        free(tid);
         unsigned int * y = malloc( sizeof( unsigned int ) );
         *y = pthread_self();
         pthread_exit( y );
     }
 
-    // only the master thread returns child thread IDs
+    // only the master thread reaches this
     matrix_free(board);
-    return tid;
+    return NULL;
 }
 
 
@@ -286,10 +284,7 @@ void* take_the_tour(void* args) {
 // MAIN ========================================================================================
 int main(int argc, char** argv){
 
-    setbuf(stdout, NULL);
-
-
-
+    // Argument checking
     if (argc < 3 || argc > 4 || (argc == 4 && atoi(argv[3]) > atoi(argv[1])*atoi(argv[2])) ||  atoi(argv[1]) <= 2 || atoi(argv[2]) <= 2) {
         fprintf(stderr, "ERROR: Invalid argument(s)\n");
         fprintf(stderr, "USAGE: a.out <m> <n> [<k>]\n");
@@ -300,38 +295,38 @@ int main(int argc, char** argv){
         return EXIT_FAILURE;
     }
 
+    // taking care of global variable
     rows = atoi(argv[1]);
     cols = atoi(argv[2]);
     available_spaces = rows * cols;
+    dead_end_boards = (int***)malloc(size_DEB * sizeof(int**));
+    master_thread = pthread_self();
 
     int** initial_board = matrix_alloc();
     printf("THREAD %u: Solving the knight's tour problem for a %dx%d board\n", (unsigned int)pthread_self(), rows, cols);
-    fflush(stdout);
 
-    // knight always starts in the top left corner
+    // Take the tour is the thread function which is the reason for the odd variable passing
     TA_t thread_args;
     thread_args.visited = 1;
     thread_args.board = initial_board;
-    thread_args.current_move.x = 0;
+    thread_args.current_move.x = 0;         // knight always starts in the top left corner (0,0)
     thread_args.current_move.y = 0;
 
-    master_thread = pthread_self();
 
-    pthread_t* tid = take_the_tour((void*)&thread_args);
-    free(tid);
+    // MAIN control function --------------------------
+    take_the_tour((void*)&thread_args);
+    matrix_free(initial_board);
 
     printf("THREAD %u: Best solution found visits %u squares (out of %u)\n", (unsigned int)pthread_self(), max_squares, available_spaces);
 
+    // Free and print dead end boards
     printf("THREAD %u: There are %d total dead end boards:\n", (unsigned int)pthread_self(), index_DEB);
     for (int i = 0; i < index_DEB; i++) {
-        //print_board(dead_end_boards[i]);
+        #ifdef PRINT_BOARDS
+            print_board(dead_end_boards[i]);
+        #endif
         matrix_free(dead_end_boards[i]);
     }
-
-
-
-
-    matrix_free(initial_board);
 
     return EXIT_SUCCESS;
 }
