@@ -22,9 +22,15 @@ int main(int argc, char** argv) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
 
-    if (world_size % 2 != 0) {
-	fprintf(stderr, "ERROR: use a multiple of two processes\n");
-	exit(EXIT_FAILURE);
+    // ensure the world size is a power of 2
+    for (int i = 1;  i < 20; i++)) {
+        if (world_size == pow(2,i)) {
+            break;
+        }
+    }
+    if (i == 20) {
+        fprintf(stderr, "ERROR: use a power of two processes\n");
+        exit(EXIT_FAILURE);
     }
 
     long long* array = NULL;
