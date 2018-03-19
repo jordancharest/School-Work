@@ -17,6 +17,7 @@ typedef struct thread_args {
 } TA_t;
 
 unsigned int max_squares = 0;
+unsigned int knight_visits = 0;
 int*** dead_end_boards;
 unsigned int size_DEB = 8;
 unsigned int index_DEB = 0;
@@ -85,22 +86,26 @@ void matrix_free( int **matrix){
 void dead_end(int** board, int visited) {
     printf("THREAD %u: Dead end after move #%d\n", (unsigned int)pthread_self(), visited);
 
-    /* ---------- CRITICAL ---------- */
-    pthread_mutex_lock(&mutex);
 
-        if (index_DEB == size_DEB) {
-            size_DEB *= 2;
-            dead_end_boards = (int***)realloc( dead_end_boards, size_DEB * sizeof(int**) );
-        }
+    // only add dead end boards if they are over the user-defined threshold for squares visited
+    if (visited >= knight_visits) {
+        /* ---------- CRITICAL ---------- */
+        pthread_mutex_lock(&mutex);
 
-        dead_end_boards[index_DEB] = board;
-        index_DEB++;
+            if (index_DEB == size_DEB) {
+                size_DEB *= 2;
+                dead_end_boards = (int***)realloc( dead_end_boards, size_DEB * sizeof(int**) );
+            }
 
-        if (visited > max_squares)
-            max_squares = visited;
+            dead_end_boards[index_DEB] = board;
+            index_DEB++;
 
-    pthread_mutex_unlock(&mutex);
-    /* ---------- CRITICAL ---------- */
+            if (visited > max_squares)
+                max_squares = visited;
+
+        pthread_mutex_unlock(&mutex);
+        /* ---------- CRITICAL ---------- */
+    }
 
     unsigned int * y = malloc( sizeof( unsigned int ) );
     *y = pthread_self();
@@ -285,7 +290,7 @@ void* take_the_tour(void* args) {
 int main(int argc, char** argv){
 
     // Argument checking
-    if (argc < 3 || argc > 4 || (argc == 4 && atoi(argv[3]) > atoi(argv[1])*atoi(argv[2])) ||  atoi(argv[1]) <= 2 || atoi(argv[2]) <= 2) {
+    if (argc < 3 || argc > 4 || (argc == 4 && ((atoi(argv[3]) > atoi(argv[1])*atoi(argv[2])) || atoi(argv[3]) < 0)) ||  atoi(argv[1]) <= 2 || atoi(argv[2]) <= 2) {
         fprintf(stderr, "ERROR: Invalid argument(s)\n");
         fprintf(stderr, "USAGE: a.out <m> <n> [<k>]\n");
         return EXIT_FAILURE;
@@ -295,12 +300,15 @@ int main(int argc, char** argv){
         return EXIT_FAILURE;
     }
 
-    // taking care of global variable
+    // assigning global variable
     rows = atoi(argv[1]);
     cols = atoi(argv[2]);
     available_spaces = rows * cols;
     dead_end_boards = (int***)malloc(size_DEB * sizeof(int**));
     master_thread = pthread_self();
+
+    if (argc == 4)
+        knight_visits = atoi(argv[3]);
 
     int** initial_board = matrix_alloc();
     printf("THREAD %u: Solving the knight's tour problem for a %dx%d board\n", (unsigned int)pthread_self(), rows, cols);
