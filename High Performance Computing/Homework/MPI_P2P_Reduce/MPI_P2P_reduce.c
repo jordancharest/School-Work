@@ -3,6 +3,14 @@
 #include <stdlib.h>
 #include <math.h>
 
+#define BGQ 1
+
+#ifdef BGQ
+#include<hwi/include/bqc/A2_inlines.h>
+#else
+#define GetTimeBase MPI_Wtime
+#endif // BGQ
+
 long long sum_per_process(long long* array, int array_size);
 long long MPI_P2P_reduce(long long* array, int array_size, int world_size, int rank);
 
@@ -10,8 +18,13 @@ long long MPI_P2P_reduce(long long* array, int array_size, int world_size, int r
 int main(int argc, char** argv) {
 
     MPI_Init(NULL, NULL);
-	const long long ARRAY_SIZE = 2097152;
+	const long long ARRAY_SIZE = 32768;
     const long long ACTUAL_SUM  = (0.5*(ARRAY_SIZE*ARRAY_SIZE) - 0.5*ARRAY_SIZE);
+
+    double time_in_secs = 0;
+    double processor_frequency = 1600000000.0;
+    unsigned long long start_cycles = 0;
+    unsigned long long end_cycles = 0;
 
 
     // Get the number of processes and rank for each process
@@ -34,44 +47,38 @@ int main(int argc, char** argv) {
     }
 
     long long* array = NULL;
-
-    if (rank == 0) {
-        array = (long long*) malloc(ARRAY_SIZE * sizeof(long long));
-        if (array == NULL) {
-            fprintf(stderr, "ERROR: malloc() failed\n");
-            exit(EXIT_FAILURE);
-        }
-
-        // Initialize array values to equal their index value
-        for (int i = 0; i < ARRAY_SIZE; i++) {
-            array[i] = i;
-        }
-    }
-
     int elements_per_proc = ARRAY_SIZE/world_size;
 
-    long long* sub_array = (long long*) malloc(sizeof(long long) * elements_per_proc);
+    long long* sub_array = malloc(sizeof(long long) * elements_per_proc);
     if (sub_array == NULL) {
         fprintf(stderr, "ERROR: malloc() failed\n");
         exit(EXIT_FAILURE);
     }
 
-    MPI_Scatter(array, elements_per_proc, MPI_LONG_LONG, sub_array, elements_per_proc, MPI_LONG_LONG, 0, MPI_COMM_WORLD);
+    for (int i = 0, j = rank*elements_per_process; j < rank*elements_per_proc + elements_per_process; i++, j++) {
+        sub_array[i] = j;
+    }
 
-	double start = MPI_Wtime();
+    // My implementation of MPI_Reduce (MPI_P2P_Reduce)
+	start_cycles = GetTimeBase();
     long long homemade_sum = MPI_P2P_reduce(sub_array, elements_per_proc, world_size, rank);
+	end_cycles = GetTimeBase();
+	time_in_secs = ((double)(end_cycles - start_cycles))/processor_frequency;
+
 	if (rank == 0)
-		printf("MPI_P2P_Reduce time: %f\n", (MPI_Wtime() - start));
+		printf("MPI_P2P_Reduce time: %f\n", time_in_secs);
 
 
-	start = MPI_Wtime();
+    // My implementation of MPI_Reduce (MPI_P2P_Reduce)
+	start_cycles = GetTimeBase();
     long long process_sum = sum_per_process(sub_array, elements_per_proc);
-
     long long mpi_sum;
     MPI_Reduce(&process_sum, &mpi_sum, 1, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
-	if (rank == 0)
-		printf("MPI_Reduce time: %f\n", (MPI_Wtime() - start));
+	end_cycles = GetTimeBase();
+	time_in_secs = ((double)(end_cycles - start_cycles))/processor_frequency;
 
+	if (rank == 0)
+		printf("MPI_Reduce time: %f\n", time_in_secs);
 
     if (rank == 0) {
 		if ((ACTUAL_SUM != mpi_sum)  ||  (ACTUAL_SUM != homemade_sum)) {
@@ -80,9 +87,6 @@ int main(int argc, char** argv) {
 
     	printf(" Actual Sum: %lld\n MPI Sum: %lld\n Homemade Sum: %lld\n", ACTUAL_SUM, mpi_sum, homemade_sum);
     }
-
-
-
 
     MPI_Finalize();
     return EXIT_SUCCESS;
