@@ -18,7 +18,7 @@ long long MPI_P2P_reduce(long long* array, int array_size, int world_size, int r
 int main(int argc, char** argv) {
 
     MPI_Init(NULL, NULL);
-	const long long ARRAY_SIZE = 1073741824;
+    const long long ARRAY_SIZE = 1073741824;
     const long long ACTUAL_SUM  = (0.5*(ARRAY_SIZE*ARRAY_SIZE) - 0.5*ARRAY_SIZE);
 
     double time_in_secs = 0;
