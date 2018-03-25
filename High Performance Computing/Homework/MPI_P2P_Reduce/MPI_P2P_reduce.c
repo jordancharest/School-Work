@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <math.h>
 
-#define BGQ 1
+//#define BGQ 1
 
 #ifdef BGQ
 #include<hwi/include/bqc/A2_inlines.h>
@@ -22,6 +22,7 @@ int main(int argc, char** argv) {
     const long long ACTUAL_SUM  = (0.5*(ARRAY_SIZE*ARRAY_SIZE) - 0.5*ARRAY_SIZE);
 
     double time_in_secs = 0;
+    double P2P_time_in_secs = 0;
     double processor_frequency = 1600000000.0;
     unsigned long long start_cycles = 0;
     unsigned long long end_cycles = 0;
@@ -54,6 +55,7 @@ int main(int argc, char** argv) {
         exit(EXIT_FAILURE);
     }
 
+    // initialize each process's subarray elements to their respective index in the global array
     for (int i = 0, j = rank*elements_per_proc; j < rank*elements_per_proc + elements_per_proc; i++, j++) {
         sub_array[i] = j;
     }
@@ -62,11 +64,12 @@ int main(int argc, char** argv) {
     start_cycles = GetTimeBase();
     long long homemade_sum = MPI_P2P_reduce(sub_array, elements_per_proc, world_size, rank);
     end_cycles = GetTimeBase();
-    time_in_secs = ((double)(end_cycles - start_cycles))/processor_frequency;
+    P2P_time_in_secs = ((double)(end_cycles - start_cycles));  // /processor_frequency; (for Blue Gene)
 
+    /*
     if (rank == 0)
-        printf("MPI_P2P_Reduce time: %f\n", time_in_secs);
-
+        printf("MPI_P2P_Reduce time: %f\n", P2P_time_in_secs);
+    */
 
     // Library implementation of MPI_Reduce
     start_cycles = GetTimeBase();
@@ -74,16 +77,21 @@ int main(int argc, char** argv) {
     long long mpi_sum;
     MPI_Reduce(&process_sum, &mpi_sum, 1, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
     end_cycles = GetTimeBase();
-    time_in_secs = ((double)(end_cycles - start_cycles))/processor_frequency;
+    time_in_secs = ((double)(end_cycles - start_cycles));  // /processor_frequency; (for Blue Gene)
 
+
+    // Output
+    /*
     if (rank == 0)
         printf("MPI_Reduce time: %f\n", time_in_secs);
+    */
 
     if (rank == 0) {
-        if ((ACTUAL_SUM != mpi_sum)  ||  (ACTUAL_SUM != homemade_sum))
+        /*if ((ACTUAL_SUM != mpi_sum)  ||  (ACTUAL_SUM != homemade_sum))
             printf("Sum failed...\n");
+        */
 
-    	printf(" Actual Sum: %lld\n MPI Sum: %lld\n Homemade Sum: %lld\n", ACTUAL_SUM, mpi_sum, homemade_sum);
+    	printf("%lld\n%lld\n", homemade_sum, mpi_sum);
     }
 
     MPI_Finalize();
@@ -120,19 +128,20 @@ long long MPI_P2P_reduce(long long* array, int array_size, int world_size, int r
         if (rank == 0  ||  (rank%receivers == 0 && rank >= receivers)) {
             num_receives++;
 
-	    if (i == 0)
-		source = rank+1;
-	    else
-		source = rank + ((int)pow(2,i));
+            // all even ranked processes will receive from one rank above
+            if (i == 0)
+                source = rank+1;
+            else
+                source = rank + ((int)pow(2,i));
 
-
-    	    MPI_Irecv((received_sum + i), 1, MPI_LONG_LONG, source, 0, MPI_COMM_WORLD, (receive_requests + i));
+            MPI_Irecv((received_sum + i), 1, MPI_LONG_LONG, source, 0, MPI_COMM_WORLD, (receive_requests + i));
 
 	    #ifdef DEBUG_MODE
 		if (rank == 0 || rank == 16)
     		printf("Rank %d: receiving from %d\n", rank, source);
 	    #endif
 
+    // if a process is filtered out in this 'round' they should never receive again
 	} else
 	    break;
     }
@@ -148,15 +157,22 @@ long long MPI_P2P_reduce(long long* array, int array_size, int world_size, int r
     int i = 0;
     MPI_Request send_request;
 
+    // every process except for zero posts one send
     if (rank > 0) {
         while (!dest_found) {
             if (rank % modifier != 0) {
-                if (i == 0) destination = rank-1;
-		else destination = rank - (int)pow(2,i);
+                // if the process has an odd rank, then it will always send to 1 less than itself
+                if (i == 0)
+                    destination = rank-1;
 
-		dest_found = 1;
-		num_sends++;
+                // else it will send to some multiple of 2 below itself
+                else
+                    destination = rank - (int)pow(2,i);
 
+                dest_found = 1;
+                num_sends++;
+
+            // this only happens in the last reduction (a.k.a only two remaining processes, zero and num_ranks/2)
             } else if (rank == modifier) {
                 destination = 0;
                 dest_found = 1;
@@ -173,6 +189,7 @@ long long MPI_P2P_reduce(long long* array, int array_size, int world_size, int r
         printf("Rank %d: waiting for %d messages\n", rank, num_receives);
     #endif
 
+    // wait to receive all messages
     for (int j = 0; j < num_receives; j++) {
         MPI_Wait((receive_requests + j), MPI_STATUS_IGNORE);
         process_sum += received_sum[j];
@@ -182,7 +199,7 @@ long long MPI_P2P_reduce(long long* array, int array_size, int world_size, int r
         #endif
     }
 
-
+    // then send your message to the destination found earlier
     if (rank > 0) {
         #ifdef DEBUG_MODE
             printf("Rank %d: sending %lld to rank %d\n", rank, process_sum, destination);
@@ -191,11 +208,9 @@ long long MPI_P2P_reduce(long long* array, int array_size, int world_size, int r
         MPI_Isend(&process_sum, 1, MPI_LONG_LONG, destination, 0, MPI_COMM_WORLD,  &send_request);
     }
 
-
     #ifdef DEBUG_MODE
         printf("Rank %d: Exiting\n", rank);
     #endif
-
 
     return process_sum;
 }
