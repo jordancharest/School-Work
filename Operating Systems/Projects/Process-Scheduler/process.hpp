@@ -84,6 +84,7 @@ public:
 		}
 	}
 
+
 private:
     char pid;
     int arrival_time;
