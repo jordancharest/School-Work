@@ -1,0 +1,3 @@
+# <proc-id>|<initial-arrival-time>|<cpu-burst-time>|<num-bursts>|<io-time>
+A|10|96|1|0
+B|20|100|1|0
