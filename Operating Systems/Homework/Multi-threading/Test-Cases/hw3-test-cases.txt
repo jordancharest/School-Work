@@ -1,0 +1,13 @@
+Test
+01 -- Compilation
+02 -- Missing Command-Line Arguments
+03 -- Invalid Command-Line Arguments ./a.out 2
+04 -- Invalid Command-Line Arguments ./a.out 2 5
+05 -- Invalid Command-Line Arguments ./a.out 3 3 0
+06 -- Invalid Command-Line Arguments ./a.out 3 3 10
+07 -- 3x3 Board ./a.out 3 3
+08 -- 3x3 Board with k set to 9 ./a.out 3 3 9
+09 -- 4x3 Board with k set to 10 ./a.out 4 3 10
+10 -- 4x3 Board with k set to 12 ./a.out 4 3 12
+11 -- 4x4 Board ./a.out 4 4
+12 -- 4x5 Board with k set to 20 ./a.out 4 5 20
