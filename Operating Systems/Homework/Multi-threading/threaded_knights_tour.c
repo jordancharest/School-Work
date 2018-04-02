@@ -290,7 +290,7 @@ void* take_the_tour(void* args) {
 int main(int argc, char** argv){
 
     // Argument checking
-    if (argc < 3 || argc > 4 || (argc == 4 && ((atoi(argv[3]) > atoi(argv[1])*atoi(argv[2])) || atoi(argv[3]) < 0)) ||  atoi(argv[1]) <= 2 || atoi(argv[2]) <= 2) {
+    if (argc < 3 || argc > 4 || (argc == 4 && ((atoi(argv[3]) > atoi(argv[1])*atoi(argv[2])) || atoi(argv[3]) <= 0)) ||  atoi(argv[1]) <= 2 || atoi(argv[2]) <= 2) {
         fprintf(stderr, "ERROR: Invalid argument(s)\n");
         fprintf(stderr, "USAGE: a.out <m> <n> [<k>]\n");
         return EXIT_FAILURE;
@@ -328,9 +328,9 @@ int main(int argc, char** argv){
     printf("THREAD %u: Best solution found visits %u squares (out of %u)\n", (unsigned int)pthread_self(), max_squares, available_spaces);
 
     // Free and print dead end boards
-    printf("THREAD %u: There are %d total dead end boards:\n", (unsigned int)pthread_self(), index_DEB);
+    //printf("THREAD %u: There are %d total dead end boards:\n", (unsigned int)pthread_self(), index_DEB);
     for (int i = 0; i < index_DEB; i++) {
-        #ifdef PRINT_BOARDS
+        #ifndef NO_PRINT_BOARDS
             print_board(dead_end_boards[i]);
         #endif
         matrix_free(dead_end_boards[i]);
