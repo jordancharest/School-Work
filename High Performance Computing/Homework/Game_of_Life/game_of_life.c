@@ -1,77 +1,145 @@
 /***************************************************************************/
-/* Template for Asssignment 4/5 ********************************************/
-/* Team Names Here              **(*****************************************/
+/* Game of Life Simulator       ********************************************/
+/* Written by Jordan Charest    ********************************************/
 /***************************************************************************/
-
-/***************************************************************************/
-/* Includes ****************************************************************/
-/***************************************************************************/
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include <math.h>
-#include "clcg4.h"
 
 #include <mpi.h>
-
-
-/***************************************************************************/
-/* Defines *****************************************************************/
-/***************************************************************************/
+#include "clcg4.h"
 
 #define ALIVE 1
 #define DEAD  0
 
-/***************************************************************************/
-/* Global Vars *************************************************************/
-/***************************************************************************/
+// Global ========================================================================================
+const unsigned int BOARD_SIZE = 8192;
+const double THRESHOLD = 0.25;
+const unsigned int rows_per_thread = 64;
+unsigned int rows_per_rank = 0;
+unsigned int num_threads = 0;
 
-// You define these
+// Function Declarations =========================================================================
+void validate_MPI(int world_size, int rank);
+int** matrix_alloc(unsigned int rows, unsigned int cols);
+void matrix_free( int **matrix, unsigned int rows);
+void first_generation(int** sub_matrix, int rank);
 
 
-/***************************************************************************/
-/* Function Decs ***********************************************************/
-/***************************************************************************/
+// MAIN ==========================================================================================
+int main(int argc, char **argv) {
+    int rank;
+    int world_size;
 
-// You define these
-
-
-/***************************************************************************/
-/* Function: Main **********************************************************/
-/***************************************************************************/
-
-int main(int argc, char *argv[])
-{
-//    int i = 0;
-    int mpi_myrank;
-    int mpi_commsize;
-// Example MPI startup and using CLCG4 RNG
     MPI_Init( &argc, &argv);
-    MPI_Comm_size( MPI_COMM_WORLD, &mpi_commsize);
-    MPI_Comm_rank( MPI_COMM_WORLD, &mpi_myrank);
+    MPI_Comm_size( MPI_COMM_WORLD, &world_size);
+    MPI_Comm_rank( MPI_COMM_WORLD, &rank);
+	validate_MPI(world_size, rank);
 
-// Init 16,384 RNG streams - each rank has an independent stream
+	num_threads = 128/world_size;
+	rows_per_rank = BOARD_SIZE/world_size;	// DON'T GET CONFUSED WITH rows_per_thread! (they are equal if num_pthreads == 0)
+
+	// Init 16,384 RNG streams - each rank has an independent stream
     InitDefault();
 
-// Note, used the mpi_myrank to select which RNG stream to use.
-// You must replace mpi_myrank with the right row being used.
-// This just show you how to call the RNG.
-    printf("Rank %d of %d has been started and a first Random Value of %lf\n",
-	   mpi_myrank, mpi_commsize, GenVal(mpi_myrank));
+#ifdef DEBUG
+	if (rank == 0) {
+		printf("Run parameters:\n");
+		printf(" Board Size: %d\n", BOARD_SIZE);
+		printf(" MPI World Size: %d\n", world_size);
+		printf(" Threads per rank: %d\n", num_threads);
+		printf(" Rows per rank: %u\n", rows_per_rank);
+		printf(" Rows per thread: %u\n", rows_per_thread);
+	}
+#endif
+
+    //printf(" Rank %d of %d has been started with a first Random Value of %lf\n",
+	//   rank, world_size, GenVal(rank));
 
     MPI_Barrier( MPI_COMM_WORLD );
+	double start_time = 0;
+	if (rank == 0)
+		start_time = MPI_Wtime();
 
-// Insert your code
+	// allocate and initialize the world; add two more rows and columns for ghost data
+	int** sub_matrix = matrix_alloc(rows_per_rank+2, BOARD_SIZE+2);
+	first_generation(sub_matrix, rank);
 
+
+
+
+
+	matrix_free(sub_matrix, rows_per_rank);
+	if (rank == 0)
+		printf("Total time: %lf\n", (MPI_Wtime() - start_time));
 
 // END -Perform a barrier and then leave MPI
     MPI_Barrier( MPI_COMM_WORLD );
     MPI_Finalize();
-    return 0;
+    return EXIT_SUCCESS;
 }
 
-/***************************************************************************/
-/* Other Functions - You write as part of the assignment********************/
-/***************************************************************************/
+
+
+// VALIDATE MPI ==================================================================================
+/* Ensure that the world size is a power of 2													*/
+void validate_MPI(int world_size, int rank) {
+	int i = 1;
+	for (; i < 20; i++) {
+		if (world_size == pow(2,i))
+			break;
+	}
+
+	if (i == 20) {
+		if (rank == 0)
+			fprintf(stderr, "ERROR: Use a multiple of two MPI ranks\n");
+		exit(EXIT_FAILURE);
+	}
+}
+
+
+// MATRIX ALLOCATION =============================================================================
+/* allocate an array of pointers to ints, then allocate a row/array of ints and assign each
+    int pointer that row (ROW MAJOR)                                                            */
+int** matrix_alloc(unsigned int rows, unsigned int cols) {
+    int** array = (int **)calloc(rows, sizeof(int*));
+    if ( array == NULL ){
+        fprintf( stderr, "ERROR: calloc() failed\n" );
+        exit(EXIT_FAILURE);
+    }
+
+    for (int i = 0; i < rows; i++){
+        array[i] = (int*)calloc(cols, sizeof(int));
+        if ( array[i] == NULL ){
+            fprintf( stderr, "ERROR: calloc() failed\n" );
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    return array;
+}
+
+
+// MATRIX FREE ===================================================================================
+void matrix_free( int **matrix, unsigned int rows) {
+    // free each pointer in the array
+    for (int i = 0; i < rows; i++){
+        free(matrix[i]);
+    }
+
+    // then free the array of pointers
+    free(matrix);
+    matrix = NULL;
+}
+
+// FIRST GENERATION ==============================================================================
+/* Randomly generate the first generation; Don't populate the first and last rows since
+	they are ghost rows																			*/
+void first_generation(int** sub_matrix, int rank) {
+	for (int row = 1; row != rows_per_rank; row++)
+		for (int col = 1; col != BOARD_SIZE; col++)
+			if (GenVal(rank*rows_per_rank + row) < THRESHOLD)
+				sub_matrix[row][col] = ALIVE;
+}
