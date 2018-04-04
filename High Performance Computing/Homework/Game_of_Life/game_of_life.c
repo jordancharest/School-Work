@@ -7,6 +7,7 @@
 #include <string.h>
 #include <errno.h>
 #include <math.h>
+#include <pthread.h>
 
 #include <mpi.h>
 #include "clcg4.h"
@@ -16,10 +17,14 @@
 
 // Global ========================================================================================
 const unsigned int BOARD_SIZE = 8192;
+const unsigned int TICKS = 128;
 const double THRESHOLD = 0.25;
+
 const unsigned int rows_per_thread = 64;
 unsigned int rows_per_rank = 0;
 unsigned int num_threads = 0;
+
+pthread_t master_thread = 0;
 
 // Function Declarations =========================================================================
 void validate_MPI(int world_size, int rank);
@@ -27,6 +32,7 @@ int** matrix_alloc(unsigned int rows, unsigned int cols);
 void matrix_free( int **matrix, unsigned int rows);
 void first_generation(int** sub_matrix, int rank);
 
+void* simulation(void* args);
 
 // MAIN ==========================================================================================
 int main(int argc, char **argv) {
@@ -37,6 +43,7 @@ int main(int argc, char **argv) {
     MPI_Comm_size( MPI_COMM_WORLD, &world_size);
     MPI_Comm_rank( MPI_COMM_WORLD, &rank);
 	validate_MPI(world_size, rank);
+	master_thread = pthread_self();	// each MPI rank will have a mster thread that will handle all communication
 
 	num_threads = 128/world_size;
 	rows_per_rank = BOARD_SIZE/world_size;	// DON'T GET CONFUSED WITH rows_per_thread! (they are equal if num_pthreads == 0)
@@ -51,7 +58,7 @@ int main(int argc, char **argv) {
 		printf(" MPI World Size: %d\n", world_size);
 		printf(" Threads per rank: %d\n", num_threads);
 		printf(" Rows per rank: %u\n", rows_per_rank);
-		printf(" Rows per thread: %u\n", rows_per_thread);
+		printf(" Rows per thread: %u\n\n\n", rows_per_thread);
 	}
 #endif
 
@@ -68,14 +75,32 @@ int main(int argc, char **argv) {
 	first_generation(sub_matrix, rank);
 
 
+#ifdef DEBUG
+	if (rank == 0) {
+		printf("Creating %u child threads\n", num_threads-1);
+	}
+#endif
 
+	// enter the simulation with all child pthreads
+	pthread_t* tid = malloc(sizeof(pthread_t) * num_threads);
+	for (int thread = 1; thread < num_threads; thread++) {
+		if ( pthread_create( &tid[thread], NULL, simulation, (void*)&sub_matrix ) != 0 ) {
+			fprintf(stderr, "ERROR: Could not create thread\n");
+			exit(EXIT_FAILURE);
+		}
+	}
+
+	// enter the simulation with the main thread
+	simulation((void*)&sub_matrix);
 
 
 	matrix_free(sub_matrix, rows_per_rank);
+
+	// Join child threads?
+
 	if (rank == 0)
 		printf("Total time: %lf\n", (MPI_Wtime() - start_time));
 
-// END -Perform a barrier and then leave MPI
     MPI_Barrier( MPI_COMM_WORLD );
     MPI_Finalize();
     return EXIT_SUCCESS;
@@ -134,6 +159,7 @@ void matrix_free( int **matrix, unsigned int rows) {
     matrix = NULL;
 }
 
+
 // FIRST GENERATION ==============================================================================
 /* Randomly generate the first generation; Don't populate the first and last rows since
 	they are ghost rows																			*/
@@ -142,4 +168,25 @@ void first_generation(int** sub_matrix, int rank) {
 		for (int col = 1; col != BOARD_SIZE; col++)
 			if (GenVal(rank*rows_per_rank + row) < THRESHOLD)
 				sub_matrix[row][col] = ALIVE;
+}
+
+
+// UPDATE SIMULATION TO THE NEXT GENERATION ======================================================
+void* simulation(void* args) {
+
+	for (int gen = 0; gen < TICKS; gen++) {
+
+
+
+
+
+
+
+
+
+
+	}
+
+
+	return 0;
 }
