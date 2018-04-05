@@ -15,6 +15,7 @@
 #define ALIVE 1
 #define DEAD  0
 
+
 // Global ========================================================================================
 const unsigned int BOARD_SIZE = 16;
 const unsigned int TICKS = 1;
@@ -28,6 +29,9 @@ int world_size = 0;
 
 pthread_t master_thread = 0;
 pthread_barrier_t barrier;
+pthread_mutex_t rank_lock = PTHREAD_MUTEX_INITIALIZER;
+int thread_organizer = 1;
+
 
 // Function Declarations =========================================================================
 void validate_MPI();
@@ -36,6 +40,8 @@ void matrix_free( int **matrix, unsigned int rows);
 void first_generation(int** sub_matrix);
 
 void* simulation(void* args);
+void new_generation(int** sub_matrix, int thread_rank);
+void add_ghost_data(int** sub_matrix, int* top, int* bottom);
 
 void print_board(int** board, unsigned int rows, unsigned int cols);
 int modulo (int numerator, int denominator);
@@ -83,10 +89,17 @@ int main(int argc, char **argv) {
 
 
 #ifdef DEBUG
-	if (rank == 0) {
-		//print_board(sub_matrix, rows_per_rank+2, BOARD_SIZE);
-		printf("Creating %u child threads\n", num_threads-1);
-	}
+	int message = 1;
+	if (rank == 1)
+		MPI_Recv(&message, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+
+	print_board(sub_matrix, rows_per_rank+2, BOARD_SIZE);
+	printf("Creating %u child threads\n", num_threads-1);
+
+
+	if (rank == 0)
+		MPI_Send(&message, 1, MPI_INT, 1, 0, MPI_COMM_WORLD);
 #endif
 
 	// enter the simulation with all child pthreads
@@ -117,8 +130,8 @@ int main(int argc, char **argv) {
 
 
 
-	if (rank == 0)
-		printf("Total time: %lf\n", (MPI_Wtime() - start_time));
+//	if (rank == 0)
+//		printf("Total time: %lf\n", (MPI_Wtime() - start_time));
 
     MPI_Barrier( MPI_COMM_WORLD );
     MPI_Finalize();
@@ -200,11 +213,22 @@ void* simulation(void* args) {
 	MPI_Request bottom_request;
 	MPI_Request send_request;
 
+	// Modulo operator in C doesn't work on negative numbers the way I need it to
 	int top_source = modulo(rank-1, world_size);
 	int bottom_source = modulo(rank+1, world_size);
 
 	int top_destination = modulo(rank-1, world_size);
 	int bottom_destination = modulo(rank+1, world_size);
+
+	int thread_rank = 0;
+
+	// arbitrary ranking system to determine which rows each thread owns; master thread is 0
+	if (pthread_self() != master_thread) {
+		pthread_mutex_lock(&rank_lock);
+			thread_rank = thread_organizer;
+			thread_organizer++;
+		pthread_mutex_unlock(&rank_lock);
+	}
 
 
 	for (int gen = 0; gen < TICKS; gen++) {
@@ -214,10 +238,12 @@ void* simulation(void* args) {
 			#endif
 
 
-			MPI_Irecv(top_row, BOARD_SIZE, MPI_INT, top_source, 0, MPI_COMM_WORLD, &top_request);
-			MPI_Irecv(bottom_row, BOARD_SIZE, MPI_INT, bottom_source, 0, MPI_COMM_WORLD, &bottom_request);
+			MPI_Irecv(top_row, BOARD_SIZE, MPI_INT, top_source, 100, MPI_COMM_WORLD, &top_request);
+			MPI_Irecv(bottom_row, BOARD_SIZE, MPI_INT, bottom_source, 200, MPI_COMM_WORLD, &bottom_request);
 		}
 
+
+		// CRITICAL vvvvvvvv Master thread receiving ghost data and incorporating into the sub matrix
 		// all threads must be done with the previous generation before the master thread attempts to update ghost data
 		pthread_barrier_wait(&barrier);
 
@@ -227,20 +253,38 @@ void* simulation(void* args) {
 			#endif
 
 
-			MPI_Isend(sub_matrix[1], BOARD_SIZE, MPI_INT, top_destination, 0, MPI_COMM_WORLD, &send_request);
-			MPI_Isend(sub_matrix[rows_per_rank], BOARD_SIZE, MPI_INT, bottom_destination, 0, MPI_COMM_WORLD, &send_request);
+			MPI_Isend(sub_matrix[1], BOARD_SIZE, MPI_INT, top_destination, 200, MPI_COMM_WORLD, &send_request);
+			MPI_Isend(sub_matrix[rows_per_rank], BOARD_SIZE, MPI_INT, bottom_destination, 100, MPI_COMM_WORLD, &send_request);
 
 			// wait to receive both top and bottom ghost rows
 			MPI_Wait(&top_request, MPI_STATUS_IGNORE);
 			MPI_Wait(&bottom_request, MPI_STATUS_IGNORE);
+
+			add_ghost_data(sub_matrix, top_row, bottom_row);
 		}
 
-		// no thread can attempt to update to this generation until the master thread has received the ghost data
 		pthread_barrier_wait(&barrier);
 
+		// CRITICAL  ^^^^^^^^ Master thread finished receiving ghost data and incorporating into the sub matrix
+		// no thread can attempt to update to this generation until the master thread has incorporated the ghost data
+
+		new_generation(sub_matrix, thread_rank);
+
+	#ifdef DEBUG
+		if (master_thread == pthread_self()) {
+			int message = 1;
+			if (rank == 1)
+				MPI_Recv(&message, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
 
+			printf("\nRANK %d:\n", rank);
+			print_board(sub_matrix, rows_per_rank+2, BOARD_SIZE);
 
+
+			if (rank == 0)
+				MPI_Send(&message, 1, MPI_INT, 1, 0, MPI_COMM_WORLD);
+		}
+	#endif
 
 
 
@@ -249,6 +293,22 @@ void* simulation(void* args) {
 
 
 	return 0;
+}
+
+// NEW GENERATION ================================================================================
+void new_generation(int** sub_matrix, int thread_rank) {
+
+
+
+
+}
+
+// ADD GHOST DATA ================================================================================
+void add_ghost_data(int** sub_matrix, int* top, int* bottom) {
+	for (int i = 0; i < BOARD_SIZE; i++) {
+		sub_matrix[0][i] = top[i];
+		sub_matrix[rows_per_rank+1][i] = bottom[i];
+	}
 }
 
 
@@ -264,6 +324,6 @@ void print_board(int** board, unsigned int rows, unsigned int cols) {
 
 
 // MODULO ========================================================================================
-inline int modulo (int numerator, int denominator) {
+inline int modulo(int numerator, int denominator) {
 	return ((numerator % denominator + denominator) % denominator);
 }
