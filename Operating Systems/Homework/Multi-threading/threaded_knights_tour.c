@@ -86,26 +86,24 @@ void matrix_free( int **matrix){
 void dead_end(int** board, int visited) {
     printf("THREAD %u: Dead end after move #%d\n", (unsigned int)pthread_self(), visited);
 
-
-    // only add dead end boards if they are over the user-defined threshold for squares visited
-    if (visited >= knight_visits) {
-        /* ---------- CRITICAL ---------- */
-        pthread_mutex_lock(&mutex);
-
+    /* ---------- CRITICAL ---------- */
+    pthread_mutex_lock(&mutex);
+        // only add dead end boards if they are over the user-defined threshold for squares visited
+        if (visited >= knight_visits) {
             if (index_DEB == size_DEB) {
                 size_DEB *= 2;
-                dead_end_boards = (int***)realloc( dead_end_boards, size_DEB * sizeof(int**) );
+                dead_end_boards = realloc( dead_end_boards, size_DEB * sizeof(*dead_end_boards) );
             }
 
             dead_end_boards[index_DEB] = board;
             index_DEB++;
+        }
 
             if (visited > max_squares)
                 max_squares = visited;
 
-        pthread_mutex_unlock(&mutex);
-        /* ---------- CRITICAL ---------- */
-    }
+    pthread_mutex_unlock(&mutex);
+    /* ---------- CRITICAL ---------- */
 
     unsigned int * y = malloc( sizeof( unsigned int ) );
     *y = pthread_self();
