@@ -42,6 +42,7 @@ void first_generation(int** sub_matrix);
 void* simulation(void* args);
 void new_generation(int** sub_matrix, int thread_rank);
 void add_ghost_data(int** sub_matrix, int* top, int* bottom);
+int count_neighbors(int** sub_matrix, int row, int col);
 
 void print_board(int** board, unsigned int rows, unsigned int cols);
 int modulo (int numerator, int denominator);
@@ -126,7 +127,7 @@ int main(int argc, char **argv) {
 
 
 
-	matrix_free(sub_matrix, rows_per_rank);
+//	matrix_free(sub_matrix, rows_per_rank);
 
 
 
@@ -268,7 +269,11 @@ void* simulation(void* args) {
 		// CRITICAL  ^^^^^^^^ Master thread finished receiving ghost data and incorporating into the sub matrix
 		// no thread can attempt to update to this generation until the master thread has incorporated the ghost data
 
+		pthread_mutex_lock(&rank_lock);
 		new_generation(sub_matrix, thread_rank);
+		pthread_mutex_unlock(&rank_lock);
+
+
 
 	#ifdef DEBUG
 		if (master_thread == pthread_self()) {
@@ -297,11 +302,73 @@ void* simulation(void* args) {
 
 // NEW GENERATION ================================================================================
 void new_generation(int** sub_matrix, int thread_rank) {
+	int neighbors = 0;
 
+	for (int row = 1; row < rows_per_rank+1; row++) {
+		for (int col = 0; col < BOARD_SIZE; col++) {
 
+			neighbors = count_neighbors(sub_matrix, row, col);
 
-
+			// rules for population generation
+			if (neighbors == 0) {
+				if (GenVal(rank*rows_per_rank + row) < THRESHOLD)
+					sub_matrix[row][col] = ALIVE;
+			}
+		}
+	}
 }
+
+// COUNT NEIGHBORS ===============================================================================
+inline int count_neighbors(int** sub_matrix, int row, int col) {
+
+	int total = 0;
+	int global_y;
+	int global_x;
+
+	for (int y = -1; y < 2; y++) {
+/*		if (y > 1)
+			fprintf(stderr, "WHAT THE FUCK - outer loop\n");
+*/
+
+		for (int x = -1; x < 2; x++) {
+			if (y > 1)
+				fprintf(stderr, "WHAT THE FUCK - inner loop\n");
+
+
+			// x may be out of bounds; y will not be due to ghost rows on top/bottom
+			global_y = y + row;
+			global_x = modulo(col+x, BOARD_SIZE);
+
+			// check if outside array bounds
+			if (global_y < 0 || global_y > (rows_per_rank+1) || global_x < 0 || global_x >= BOARD_SIZE) {
+				fprintf(stderr, "Row: %d, y: %d\n", row, y-row);
+				fprintf(stderr, "[%d][%d]\n", y, x);
+			}
+
+
+
+			if (y > 1)
+				fprintf(stderr, "WHAT THE FUCK - before sub matrix\n");
+
+
+			if (sub_matrix[global_y][global_x] && !(global_y == row  && global_x == col))
+				total++;
+
+
+			if (y > 1)
+				fprintf(stderr, "WHAT THE FUCK - after sub matrix\n");
+
+
+
+
+
+		}
+	}
+
+	return total;
+}
+
+
 
 // ADD GHOST DATA ================================================================================
 void add_ghost_data(int** sub_matrix, int* top, int* bottom) {
@@ -324,6 +391,6 @@ void print_board(int** board, unsigned int rows, unsigned int cols) {
 
 
 // MODULO ========================================================================================
-inline int modulo(int numerator, int denominator) {
+inline int modulo (int numerator, int denominator) {
 	return ((numerator % denominator + denominator) % denominator);
 }
