@@ -17,10 +17,10 @@
 
 
 // Global ========================================================================================
-const unsigned int BOARD_SIZE = 32;
-const unsigned int TICKS = 3;
+const unsigned int BOARD_SIZE = 4096;
+const unsigned int TICKS = 128;
 const double THRESHOLD = 0.25;
-const int MAX_WORLD_SIZE = 16;
+const int MAX_WORLD_SIZE = 128;
 
 unsigned int rows_per_thread = 0;
 unsigned int rows_per_rank = 0;
@@ -101,7 +101,6 @@ int main(int argc, char **argv) {
 	first_generation(sub_matrix);
 
 
-
 	#if 0
 		if (master_thread == pthread_self()) {
 			for (int i = 0; i < world_size; i++) {
@@ -114,10 +113,6 @@ int main(int argc, char **argv) {
 			}
 		}
 	#endif
-
-
-
-
 
 
 
@@ -278,7 +273,7 @@ void* simulation(void* args) {
 			MPI_Isend(sub_matrix[rows_per_rank], BOARD_SIZE, MPI_INT, bottom_destination, 100, MPI_COMM_WORLD, &send_request);
 
 
-			#ifdef DEBUG
+			#if 0
 				if (master_thread == pthread_self()) {
 					for (int i = 0; i < world_size; i++) {
 						MPI_Barrier(MPI_COMM_WORLD);
@@ -324,21 +319,20 @@ void* simulation(void* args) {
 
 		}	// end master thread incorporation of ghost data
 
-
 		pthread_barrier_wait(&barrier);
 
 		// CRITICAL  ^^^^^^^^ Master thread finished receiving ghost data and incorporating into the sub matrix
-		// no thread can attempt to update to this generation until the master thread has incorporated the ghost data
+		// no thread can attempt to count neighbors until the master thread has incorporated the ghost data
+
+
 
 		for (int row = thread_rank*rows_per_thread+1;  row < (thread_rank*rows_per_thread + rows_per_thread + 1);  row++)
 			for (int col = 0; col < BOARD_SIZE; col++)
 				neighbors[row][col] = count_neighbors(sub_matrix, row, col);
 
-
-		//pthread_mutex_lock(&rank_lock);
+		// update to the next generation, but only if everyone is done counting their neighbors
+		pthread_barrier_wait(&barrier);
 		new_generation(sub_matrix, thread_rank, neighbors);
-		//pthread_mutex_unlock(&rank_lock);
-
 
 
 		#if 0
@@ -353,11 +347,7 @@ void* simulation(void* args) {
 				}
 			}
 		#endif
-
-
-
-
-	}
+	} // end simulation
 
 
 	return 0;
