@@ -17,10 +17,10 @@
 
 
 // Global ========================================================================================
-const unsigned int BOARD_SIZE = 4096;
-const unsigned int TICKS = 128;
+const unsigned int BOARD_SIZE = 32;
+const unsigned int TICKS = 3;
 const double THRESHOLD = 0.25;
-const int MAX_WORLD_SIZE = 128;
+const int MAX_WORLD_SIZE = 16;
 
 unsigned int rows_per_thread = 0;
 unsigned int rows_per_rank = 0;
@@ -41,7 +41,7 @@ void matrix_free( int **matrix, unsigned int rows);
 void first_generation(int** sub_matrix);
 
 void* simulation(void* args);
-void new_generation(int** sub_matrix, int thread_rank);
+void new_generation(int** sub_matrix, int thread_rank, int** neighbors);
 void add_ghost_data(int** sub_matrix, int* top, int* bottom);
 int count_neighbors(int** sub_matrix, int row, int col);
 
@@ -62,9 +62,13 @@ int main(int argc, char **argv) {
 		return EXIT_FAILURE;
 	}
 
-	num_threads = 128/world_size;
+	num_threads = MAX_WORLD_SIZE/world_size;
 	rows_per_rank = BOARD_SIZE/world_size;	// DON'T GET CONFUSED WITH rows_per_thread! (they are equal if num_threads == 0)
 	rows_per_thread = rows_per_rank/num_threads;
+	if (rows_per_thread == 0) {
+		fprintf(stderr, "Rows per thread = 0! Your world size is too large for the given board size\n");
+		return EXIT_FAILURE;
+	}
 
 	// Init 16,384 RNG streams - each rank has an independent stream
     InitDefault();
@@ -237,6 +241,8 @@ void* simulation(void* args) {
 
 	int thread_rank = 0;
 
+	int** neighbors = matrix_alloc(rows_per_rank+2, BOARD_SIZE);
+
 	// arbitrary ranking system to determine which rows each thread owns; master thread is 0
 	if (pthread_self() != master_thread) {
 		pthread_mutex_lock(&rank_lock);
@@ -272,7 +278,7 @@ void* simulation(void* args) {
 			MPI_Isend(sub_matrix[rows_per_rank], BOARD_SIZE, MPI_INT, bottom_destination, 100, MPI_COMM_WORLD, &send_request);
 
 
-			#if 0
+			#ifdef DEBUG
 				if (master_thread == pthread_self()) {
 					for (int i = 0; i < world_size; i++) {
 						MPI_Barrier(MPI_COMM_WORLD);
@@ -291,18 +297,9 @@ void* simulation(void* args) {
 				}
 			#endif
 
-
-
-
-
-
-
 			// wait to receive both top and bottom ghost rows
 			MPI_Wait(&top_request, MPI_STATUS_IGNORE);
 			MPI_Wait(&bottom_request, MPI_STATUS_IGNORE);
-
-
-
 
 			#if 0
 				if (master_thread == pthread_self()) {
@@ -323,46 +320,39 @@ void* simulation(void* args) {
 				}
 			#endif
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 			add_ghost_data(sub_matrix, top_row, bottom_row);
-		}
+
+		}	// end master thread incorporation of ghost data
+
 
 		pthread_barrier_wait(&barrier);
 
 		// CRITICAL  ^^^^^^^^ Master thread finished receiving ghost data and incorporating into the sub matrix
 		// no thread can attempt to update to this generation until the master thread has incorporated the ghost data
 
-		pthread_mutex_lock(&rank_lock);
-		new_generation(sub_matrix, thread_rank);
-		pthread_mutex_unlock(&rank_lock);
+		for (int row = thread_rank*rows_per_thread+1;  row < (thread_rank*rows_per_thread + rows_per_thread + 1);  row++)
+			for (int col = 0; col < BOARD_SIZE; col++)
+				neighbors[row][col] = count_neighbors(sub_matrix, row, col);
+
+
+		//pthread_mutex_lock(&rank_lock);
+		new_generation(sub_matrix, thread_rank, neighbors);
+		//pthread_mutex_unlock(&rank_lock);
 
 
 
-	#if 0
-		if (master_thread == pthread_self()) {
-			for (int i = 0; i < world_size; i++) {
-				MPI_Barrier(MPI_COMM_WORLD);
+		#if 0
+			if (master_thread == pthread_self()) {
+				for (int i = 0; i < world_size; i++) {
+					MPI_Barrier(MPI_COMM_WORLD);
 
-				if (rank == i) {
-					printf("\nRANK %d:\n", rank);
-					print_board(sub_matrix, rows_per_rank+2, BOARD_SIZE);
+					if (rank == i) {
+						printf("\nRANK %d:\n", rank);
+						print_board(sub_matrix, rows_per_rank+2, BOARD_SIZE);
+					}
 				}
 			}
-		}
-	#endif
+		#endif
 
 
 
@@ -374,8 +364,7 @@ void* simulation(void* args) {
 }
 
 // NEW GENERATION ================================================================================
-void new_generation(int** sub_matrix, int thread_rank) {
-	int neighbors = 0;
+void new_generation(int** sub_matrix, int thread_rank, int** neighbors) {
 
 	#if 0
 		printf("\nRANK %d, THREAD %d: processing rows %d - %d\n", rank, thread_rank, (thread_rank*rows_per_thread+1), (thread_rank*rows_per_thread + rows_per_thread));
@@ -387,26 +376,25 @@ void new_generation(int** sub_matrix, int thread_rank) {
 			// Sometimes we will ignore a cell's neighbors and just randomly choose if it is alive or dead
 			if (GenVal(rank*rows_per_rank + row) < THRESHOLD) {
 				if (GenVal(rank*rows_per_rank + row) < 0.5)
-					sub_matrix[row][col] |= ALIVE;
+					sub_matrix[row][col] = ALIVE;
 				else
-					sub_matrix[row][col] &= DEAD;
+					sub_matrix[row][col] = DEAD;
 
 
 			// the rest of the time we will determine a cell's life by its neighbors
 			} else {
-				neighbors = count_neighbors(sub_matrix, row, col);
 
 				// alive cells with fewer than 2 neighbors will die
-				if (sub_matrix[row][col]  &&  neighbors < 2) {
-					sub_matrix[row][col] &= DEAD;
+				if (sub_matrix[row][col]  &&  neighbors[row][col] < 2) {
+					sub_matrix[row][col] = DEAD;
 
 				// alive cells with more than 3 neighbors will die
-				} else if (sub_matrix[row][col]  &&  neighbors > 3) {
-					sub_matrix[row][col] &= DEAD;
+				} else if (sub_matrix[row][col]  &&  neighbors[row][col] > 3) {
+					sub_matrix[row][col] = DEAD;
 
 				// dead cells with exactly 3 neighbors will be born
-				} else if (!sub_matrix[row][col]  &&  neighbors == 3) {
-					sub_matrix[row][col] |= ALIVE;
+				} else if (!sub_matrix[row][col]  &&  neighbors[row][col] == 3) {
+					sub_matrix[row][col] = ALIVE;
 				}
 			}
 		}
