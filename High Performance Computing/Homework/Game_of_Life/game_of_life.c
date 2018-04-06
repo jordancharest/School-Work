@@ -17,7 +17,7 @@
 
 
 // Global ========================================================================================
-const unsigned int BOARD_SIZE = 4096;
+const unsigned int BOARD_SIZE = 16384;
 const unsigned int TICKS = 128;
 const double THRESHOLD = 0.25;
 const int MAX_WORLD_SIZE = 128;
@@ -333,6 +333,7 @@ void* simulation(void* args) {
 		// update to the next generation, but only if everyone is done counting their neighbors
 		pthread_barrier_wait(&barrier);
 		new_generation(sub_matrix, thread_rank, neighbors);
+
 
 		#if 0
 			if (master_thread == pthread_self()) {
