@@ -334,7 +334,6 @@ void* simulation(void* args) {
 		pthread_barrier_wait(&barrier);
 		new_generation(sub_matrix, thread_rank, neighbors);
 
-
 		#if 0
 			if (master_thread == pthread_self()) {
 				for (int i = 0; i < world_size; i++) {
