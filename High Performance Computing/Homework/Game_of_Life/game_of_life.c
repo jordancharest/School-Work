@@ -17,11 +17,12 @@
 
 
 // Global ========================================================================================
-const unsigned int BOARD_SIZE = 16;
-const unsigned int TICKS = 1;
+const unsigned int BOARD_SIZE = 4096;
+const unsigned int TICKS = 128;
 const double THRESHOLD = 0.25;
-const unsigned int ROWS_PER_THREAD = 64;
+const int MAX_WORLD_SIZE = 128;
 
+unsigned int rows_per_thread = 0;
 unsigned int rows_per_rank = 0;
 unsigned int num_threads = 0;
 int rank = 0;
@@ -56,8 +57,14 @@ int main(int argc, char **argv) {
 	validate_MPI();
 	master_thread = pthread_self();	// each MPI rank will have a mster thread that will handle all communication
 
+	if (world_size > MAX_WORLD_SIZE) {
+		fprintf(stderr, "ERROR: Adjust max world size to continue. Kratos: 128; Blue Gene/Q: 256");
+		return EXIT_FAILURE;
+	}
+
 	num_threads = 128/world_size;
-	rows_per_rank = BOARD_SIZE/world_size;	// DON'T GET CONFUSED WITH rows_per_thread! (they are equal if num_pthreads == 0)
+	rows_per_rank = BOARD_SIZE/world_size;	// DON'T GET CONFUSED WITH rows_per_thread! (they are equal if num_threads == 0)
+	rows_per_thread = rows_per_rank/num_threads;
 
 	// Init 16,384 RNG streams - each rank has an independent stream
     InitDefault();
@@ -70,9 +77,10 @@ int main(int argc, char **argv) {
 		printf("Run parameters:\n");
 		printf(" Board Size: %d\n", BOARD_SIZE);
 		printf(" MPI World Size: %d\n", world_size);
-		printf(" Threads per rank: %d\n", num_threads);
 		printf(" Rows per rank: %u\n", rows_per_rank);
-		printf(" Rows per thread: %u\n\n\n", ROWS_PER_THREAD);
+		printf(" Threads per rank: %d\n", num_threads);
+		printf(" Rows per thread: %u\n\n\n", rows_per_thread);
+		fflush(stdout);
 	}
 #endif
 
@@ -89,19 +97,25 @@ int main(int argc, char **argv) {
 	first_generation(sub_matrix);
 
 
-#ifdef DEBUG
-	int message = 1;
-	if (rank == 1)
-		MPI_Recv(&message, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+	#if 0
+		if (master_thread == pthread_self()) {
+			for (int i = 0; i < world_size; i++) {
+				MPI_Barrier(MPI_COMM_WORLD);
+
+				if (rank == i) {
+					printf("\nRANK %d:\n", rank);
+					print_board(sub_matrix, rows_per_rank+2, BOARD_SIZE);
+				}
+			}
+		}
+	#endif
 
 
-	print_board(sub_matrix, rows_per_rank+2, BOARD_SIZE);
-	printf("Creating %u child threads\n", num_threads-1);
 
 
-	if (rank == 0)
-		MPI_Send(&message, 1, MPI_INT, 1, 0, MPI_COMM_WORLD);
-#endif
+
+
 
 	// enter the simulation with all child pthreads
 	pthread_t* tid = malloc(sizeof(pthread_t) * num_threads);
@@ -127,12 +141,12 @@ int main(int argc, char **argv) {
 
 
 
-//	matrix_free(sub_matrix, rows_per_rank);
+//	matrix_free(sub_matrix, rows_per_rank+2);
 
 
 
-//	if (rank == 0)
-//		printf("Total time: %lf\n", (MPI_Wtime() - start_time));
+	if (rank == 0)
+		printf("\n\nTotal time: %lf\n", (MPI_Wtime() - start_time));
 
     MPI_Barrier( MPI_COMM_WORLD );
     MPI_Finalize();
@@ -234,7 +248,7 @@ void* simulation(void* args) {
 
 	for (int gen = 0; gen < TICKS; gen++) {
 		if (master_thread == pthread_self()) {
-			#ifdef DEBUG
+			#if 0
 				printf("RANK %d: Receiving top row from rank %d and bottom row from rank %d\n", rank, top_source, bottom_source);
 			#endif
 
@@ -249,7 +263,7 @@ void* simulation(void* args) {
 		pthread_barrier_wait(&barrier);
 
 		if (master_thread == pthread_self()) {
-			#ifdef DEBUG
+			#if 0
 				printf("RANK %d: Sending top row to rank %d and bottom row to rank %d\n", rank, top_destination, bottom_destination);
 			#endif
 
@@ -257,9 +271,71 @@ void* simulation(void* args) {
 			MPI_Isend(sub_matrix[1], BOARD_SIZE, MPI_INT, top_destination, 200, MPI_COMM_WORLD, &send_request);
 			MPI_Isend(sub_matrix[rows_per_rank], BOARD_SIZE, MPI_INT, bottom_destination, 100, MPI_COMM_WORLD, &send_request);
 
+
+			#if 0
+				if (master_thread == pthread_self()) {
+					for (int i = 0; i < world_size; i++) {
+						MPI_Barrier(MPI_COMM_WORLD);
+
+						if (rank == i) {
+							printf("\nRANK %d: Sending\n", rank);
+							for (int j = 0; j < BOARD_SIZE; j++)
+								printf("%d", sub_matrix[1][j]);
+
+							printf("\n");
+
+							for (int j = 0; j < BOARD_SIZE; j++)
+								printf("%d", sub_matrix[rows_per_rank][j]);
+						}
+					}
+				}
+			#endif
+
+
+
+
+
+
+
 			// wait to receive both top and bottom ghost rows
 			MPI_Wait(&top_request, MPI_STATUS_IGNORE);
 			MPI_Wait(&bottom_request, MPI_STATUS_IGNORE);
+
+
+
+
+			#if 0
+				if (master_thread == pthread_self()) {
+					for (int i = 0; i < world_size; i++) {
+						MPI_Barrier(MPI_COMM_WORLD);
+
+						if (rank == i) {
+							printf("\nRANK %d: Received\n", rank);
+							for (int j = 0; j < BOARD_SIZE; j++)
+								printf("%d", top_row[j]);
+
+							printf("\n");
+
+							for (int j = 0; j < BOARD_SIZE; j++)
+								printf("%d", bottom_row[j]);
+						}
+					}
+				}
+			#endif
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 			add_ghost_data(sub_matrix, top_row, bottom_row);
 		}
@@ -275,19 +351,16 @@ void* simulation(void* args) {
 
 
 
-	#ifdef DEBUG
+	#if 0
 		if (master_thread == pthread_self()) {
-			int message = 1;
-			if (rank == 1)
-				MPI_Recv(&message, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+			for (int i = 0; i < world_size; i++) {
+				MPI_Barrier(MPI_COMM_WORLD);
 
-
-			printf("\nRANK %d:\n", rank);
-			print_board(sub_matrix, rows_per_rank+2, BOARD_SIZE);
-
-
-			if (rank == 0)
-				MPI_Send(&message, 1, MPI_INT, 1, 0, MPI_COMM_WORLD);
+				if (rank == i) {
+					printf("\nRANK %d:\n", rank);
+					print_board(sub_matrix, rows_per_rank+2, BOARD_SIZE);
+				}
+			}
 		}
 	#endif
 
@@ -304,15 +377,37 @@ void* simulation(void* args) {
 void new_generation(int** sub_matrix, int thread_rank) {
 	int neighbors = 0;
 
-	for (int row = 1; row < rows_per_rank+1; row++) {
+	#if 0
+		printf("\nRANK %d, THREAD %d: processing rows %d - %d\n", rank, thread_rank, (thread_rank*rows_per_thread+1), (thread_rank*rows_per_thread + rows_per_thread));
+	#endif
+
+	for (int row = thread_rank*rows_per_thread+1;  row < (thread_rank*rows_per_thread + rows_per_thread + 1);  row++) {
 		for (int col = 0; col < BOARD_SIZE; col++) {
 
-			neighbors = count_neighbors(sub_matrix, row, col);
+			// Sometimes we will ignore a cell's neighbors and just randomly choose if it is alive or dead
+			if (GenVal(rank*rows_per_rank + row) < THRESHOLD) {
+				if (GenVal(rank*rows_per_rank + row) < 0.5)
+					sub_matrix[row][col] |= ALIVE;
+				else
+					sub_matrix[row][col] &= DEAD;
 
-			// rules for population generation
-			if (neighbors == 0) {
-				if (GenVal(rank*rows_per_rank + row) < THRESHOLD)
-					sub_matrix[row][col] = ALIVE;
+
+			// the rest of the time we will determine a cell's life by its neighbors
+			} else {
+				neighbors = count_neighbors(sub_matrix, row, col);
+
+				// alive cells with fewer than 2 neighbors will die
+				if (sub_matrix[row][col]  &&  neighbors < 2) {
+					sub_matrix[row][col] &= DEAD;
+
+				// alive cells with more than 3 neighbors will die
+				} else if (sub_matrix[row][col]  &&  neighbors > 3) {
+					sub_matrix[row][col] &= DEAD;
+
+				// dead cells with exactly 3 neighbors will be born
+				} else if (!sub_matrix[row][col]  &&  neighbors == 3) {
+					sub_matrix[row][col] |= ALIVE;
+				}
 			}
 		}
 	}
@@ -322,45 +417,16 @@ void new_generation(int** sub_matrix, int thread_rank) {
 inline int count_neighbors(int** sub_matrix, int row, int col) {
 
 	int total = 0;
-	int global_y;
-	int global_x;
+	int y, x;
 
-	for (int y = -1; y < 2; y++) {
-/*		if (y > 1)
-			fprintf(stderr, "WHAT THE FUCK - outer loop\n");
-*/
-
-		for (int x = -1; x < 2; x++) {
-			if (y > 1)
-				fprintf(stderr, "WHAT THE FUCK - inner loop\n");
-
-
+	for (int i = -1; i < 2; i++) {
+		for (int j = -1; j < 2; j++) {
 			// x may be out of bounds; y will not be due to ghost rows on top/bottom
-			global_y = y + row;
-			global_x = modulo(col+x, BOARD_SIZE);
+			y = i + row;
+			x = modulo(col+j, BOARD_SIZE);
 
-			// check if outside array bounds
-			if (global_y < 0 || global_y > (rows_per_rank+1) || global_x < 0 || global_x >= BOARD_SIZE) {
-				fprintf(stderr, "Row: %d, y: %d\n", row, y-row);
-				fprintf(stderr, "[%d][%d]\n", y, x);
-			}
-
-
-
-			if (y > 1)
-				fprintf(stderr, "WHAT THE FUCK - before sub matrix\n");
-
-
-			if (sub_matrix[global_y][global_x] && !(global_y == row  && global_x == col))
+			if (sub_matrix[y][x] && !(y == row  && x == col))
 				total++;
-
-
-			if (y > 1)
-				fprintf(stderr, "WHAT THE FUCK - after sub matrix\n");
-
-
-
-
 
 		}
 	}
