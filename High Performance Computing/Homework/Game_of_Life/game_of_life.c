@@ -5,7 +5,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
 #include <math.h>
 #include <pthread.h>
 
@@ -17,8 +16,8 @@
 
 
 // Global ========================================================================================
-const unsigned int BOARD_SIZE = 16384;
-const unsigned int TICKS = 128;
+const unsigned int BOARD_SIZE = 256;
+const unsigned int TICKS = 12;
 const double THRESHOLD = 0.25;
 const int MAX_WORLD_SIZE = 256;
 
@@ -45,7 +44,9 @@ void new_generation(int** sub_matrix, int thread_rank, int** neighbors);
 void add_ghost_data(int** sub_matrix, int* top, int* bottom);
 int count_neighbors(int** sub_matrix, int row, int col);
 
-void print_board(int** board, unsigned int rows, unsigned int cols);
+int** pooling(int** sub_matrix);
+
+void print_board(int** board, unsigned int rows, unsigned int cols, char spacer);
 int modulo (int numerator, int denominator);
 
 // MAIN ==========================================================================================
@@ -127,25 +128,19 @@ int main(int argc, char **argv) {
 
 	// enter the simulation with the main thread
 	simulation((void*)sub_matrix);
-
-
-	// PASS BACK CHILD THREAD ID? POSSIBLY DETACH CHILD THREADS?
-	// Join child threads
-/*	unsigned int* x;
-	for (int i = 0; i < num_threads; i++) {
-		if ( pthread_join(tid[i], (void**)&x) != 0 )
-			fprintf( stderr, "MAIN: Could not join child thread\n");
-	}
-*/
-
-
-
-//	matrix_free(sub_matrix, rows_per_rank+2);
-
-
+	pthread_barrier_wait(&barrier);
 
 	if (rank == 0)
-		printf("\n\nTotal time: %lf\n", (MPI_Wtime() - start_time));
+		printf("\n\nTotal Compute Time: %lf\n", (MPI_Wtime() - start_time));
+
+	// IO Operations
+	int** heatmap = pooling(sub_matrix);
+	if (rank == 0)
+		print_board(heatmap, rows_per_rank/16, BOARD_SIZE/16, ' ');
+
+	matrix_free(sub_matrix, rows_per_rank+2);
+
+
 
     MPI_Barrier( MPI_COMM_WORLD );
     MPI_Finalize();
@@ -169,42 +164,6 @@ void validate_MPI() {
 		exit(EXIT_FAILURE);
 	}
 }
-
-
-// MATRIX ALLOCATION =============================================================================
-/* allocate an array of pointers to ints, then allocate a row/array of ints and assign each
-    int pointer that row (ROW MAJOR)                                                            */
-int** matrix_alloc(unsigned int rows, unsigned int cols) {
-    int** array = calloc(rows, sizeof(*array));
-    if ( array == NULL ) {
-        fprintf( stderr, "ERROR: calloc() failed\n" );
-        exit(EXIT_FAILURE);
-    }
-
-    for (int i = 0; i < rows; i++){
-        array[i] = calloc(cols, sizeof(*array[i]));
-        if ( array[i] == NULL ){
-            fprintf( stderr, "ERROR: calloc() failed\n" );
-            exit(EXIT_FAILURE);
-        }
-    }
-
-    return array;
-}
-
-
-// MATRIX FREE ===================================================================================
-void matrix_free( int **matrix, unsigned int rows) {
-    // free each pointer in the array
-    for (int i = 0; i < rows; i++){
-        free(matrix[i]);
-    }
-
-    // then free the array of pointers
-    free(matrix);
-    matrix = NULL;
-}
-
 
 // FIRST GENERATION ==============================================================================
 /* Randomly generate the first generation; Don't populate the first and last rows since
@@ -349,6 +308,11 @@ void* simulation(void* args) {
 		#endif
 	} // end simulation
 
+	if (pthread_self() != master_thread) {
+		pthread_detach(pthread_self());
+		pthread_barrier_wait(&barrier);
+		return EXIT_SUCCESS;
+	}
 
 	return 0;
 }
@@ -412,6 +376,35 @@ inline int count_neighbors(int** sub_matrix, int row, int col) {
 	return total;
 }
 
+// POOLING =======================================================================================
+/*	Pool sub matrix elements together by summing 16 x 16 grids into one element					*/
+int** pooling(int** sub_matrix) {
+
+	int rf = 16;	// reduction factor
+	const int POOL_SIZE = BOARD_SIZE/rf;
+	int** pooled_data = matrix_alloc(rows_per_rank/rf, POOL_SIZE);
+
+	int pooled_sum = 0;
+
+	for (int i = 0; i < rows_per_rank/rf; i++) {
+		for ( int j = 0; j < POOL_SIZE; j++) {
+			pooled_sum = 0;
+
+			for (int m = i*rf; m < i*rf + rf; m++) {
+				for (int n = j*rf; n < j*rf + rf; n++) {
+					pooled_sum += sub_matrix[m][n];
+				}
+			}
+
+			pooled_data[i][j] = pooled_sum;
+		}
+	}
+
+	return pooled_data;
+}
+
+
+
 
 
 // ADD GHOST DATA ================================================================================
@@ -423,11 +416,48 @@ void add_ghost_data(int** sub_matrix, int* top, int* bottom) {
 }
 
 
+
+
+// MATRIX ALLOCATION =============================================================================
+/* allocate an array of pointers to ints, then allocate a row/array of ints and assign each
+    int pointer that row (ROW MAJOR)                                                            */
+int** matrix_alloc(unsigned int rows, unsigned int cols) {
+    int** array = calloc(rows, sizeof(*array));
+    if ( array == NULL ) {
+        fprintf( stderr, "ERROR: calloc() failed\n" );
+        exit(EXIT_FAILURE);
+    }
+
+    for (int i = 0; i < rows; i++){
+        array[i] = calloc(cols, sizeof(*array[i]));
+        if ( array[i] == NULL ){
+            fprintf( stderr, "ERROR: calloc() failed\n" );
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    return array;
+}
+
+
+// MATRIX FREE ===================================================================================
+void matrix_free( int **matrix, unsigned int rows) {
+    // free each pointer in the array
+    for (int i = 0; i < rows; i++){
+        free(matrix[i]);
+    }
+
+    // then free the array of pointers
+    free(matrix);
+    matrix = NULL;
+}
+
+
 // PRINT BOARD ===================================================================================
-void print_board(int** board, unsigned int rows, unsigned int cols) {
+void print_board(int** board, unsigned int rows, unsigned int cols, char spacer) {
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
-            printf("%d", board[i][j]);
+            printf("%d%c", board[i][j], spacer);
         }
         printf("\n");
     }
