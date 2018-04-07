@@ -34,7 +34,9 @@ int thread_organizer = 1;
 
 
 // Function Declarations =========================================================================
-void validate_MPI();
+void sim_init();
+void validate();
+
 int** matrix_alloc(unsigned int rows, unsigned int cols);
 void matrix_free( int **matrix, unsigned int rows);
 void first_generation(int** sub_matrix);
@@ -53,23 +55,9 @@ int modulo (int numerator, int denominator);
 int main(int argc, char **argv) {
 
     MPI_Init( &argc, &argv);
-    MPI_Comm_size( MPI_COMM_WORLD, &world_size);
-    MPI_Comm_rank( MPI_COMM_WORLD, &rank);
-	validate_MPI();
-	master_thread = pthread_self();	// each MPI rank will have a mster thread that will handle all communication
 
-	if (world_size > MAX_WORLD_SIZE) {
-		fprintf(stderr, "ERROR: Adjust max world size to continue. Kratos: 128; Blue Gene/Q: 256");
-		return EXIT_FAILURE;
-	}
-
-	num_threads = MAX_WORLD_SIZE/world_size;
-	rows_per_rank = BOARD_SIZE/world_size;	// DON'T GET CONFUSED WITH rows_per_thread! (they are equal if num_threads == 0)
-	rows_per_thread = rows_per_rank/num_threads;
-	if (rows_per_thread == 0) {
-		fprintf(stderr, "Rows per thread = 0! Your world size is too large for the given board size\n");
-		return EXIT_FAILURE;
-	}
+	// Initialize run parameters and ensure they are valid
+	sim_init();
 
 	// Init 16,384 RNG streams - each rank has an independent stream
     InitDefault();
@@ -89,9 +77,9 @@ int main(int argc, char **argv) {
 	}
 #endif
 
-    //printf(" Rank %d of %d has been started with a first Random Value of %lf\n",
-	//   rank, world_size, GenVal(rank));
+	// Compute Operations ---------------------------------------------------------------
 
+	// Time stamp for compute time
     MPI_Barrier( MPI_COMM_WORLD );
 	double start_time = 0;
 	if (rank == 0)
@@ -100,22 +88,6 @@ int main(int argc, char **argv) {
 	// allocate and initialize the world; add two more rows for ghost data
 	int** sub_matrix = matrix_alloc(rows_per_rank+2, BOARD_SIZE);
 	first_generation(sub_matrix);
-
-
-	#if 0
-		if (master_thread == pthread_self()) {
-			for (int i = 0; i < world_size; i++) {
-				MPI_Barrier(MPI_COMM_WORLD);
-
-				if (rank == i) {
-					printf("\nRANK %d:\n", rank);
-					print_board(sub_matrix, rows_per_rank+2, BOARD_SIZE);
-				}
-			}
-		}
-	#endif
-
-
 
 	// enter the simulation with all child pthreads
 	pthread_t* tid = malloc(sizeof(pthread_t) * num_threads);
@@ -133,14 +105,24 @@ int main(int argc, char **argv) {
 	if (rank == 0)
 		printf("\n\nTotal Compute Time: %lf\n", (MPI_Wtime() - start_time));
 
-	// IO Operations
-	int** heatmap = pooling(sub_matrix);
+
+	// I/O Operations ----------------------------------------------------------------
+
+	// Time stamp for I/O Time
+	MPI_Barrier(MPI_COMM_WORLD);
+	start_time = 0;
 	if (rank == 0)
-		print_board(heatmap, rows_per_rank/16, BOARD_SIZE/16, ' ');
+		start_time = MPI_Wtime();
 
+	// pool data to construct heatmap data
+	int** heatmap = pooling(sub_matrix);
+
+
+
+
+	// Cleanup
 	matrix_free(sub_matrix, rows_per_rank+2);
-
-
+	matrix_free(heatmap, rows_per_rank);
 
     MPI_Barrier( MPI_COMM_WORLD );
     MPI_Finalize();
@@ -148,21 +130,50 @@ int main(int argc, char **argv) {
 }
 
 
+// SIM INIT ======================================================================================
+void sim_init() {
+    MPI_Comm_size( MPI_COMM_WORLD, &world_size);
+    MPI_Comm_rank( MPI_COMM_WORLD, &rank);
+
+	// define run parameters
+	master_thread = pthread_self();	// each MPI rank will have a master thread that will handle all communication
+	num_threads = MAX_WORLD_SIZE/world_size;
+	rows_per_rank = BOARD_SIZE/world_size;	// DON'T GET CONFUSED WITH rows_per_thread! (they are equal if num_threads == 0)
+	rows_per_thread = rows_per_rank/num_threads;
+
+	// ensure they are valid
+	validate();
+
+}
 
 // VALIDATE MPI ==================================================================================
-/* Ensure that the world size is a power of 2													*/
-void validate_MPI() {
+/* Ensure that the simulation run parameters are valid											*/
+void validate() {
+
+	// ensure that the world size is a power of 2
 	int i = 1;
 	for (; i < 20; i++) {
 		if (world_size == pow(2,i))
 			break;
 	}
-
 	if (i == 20) {
 		if (rank == 0)
 			fprintf(stderr, "ERROR: Use a multiple of two MPI ranks\n");
 		exit(EXIT_FAILURE);
 	}
+
+	// ensure the world size is not more than allowed on the system
+	if (world_size > MAX_WORLD_SIZE) {
+		fprintf(stderr, "ERROR: Adjust max world size to continue. Kratos: 128; Blue Gene/Q: 256");
+		exit(EXIT_FAILURE);
+	}
+
+	// ensure that there aren't too many threads for the given board (# threads <= # rows)
+	if (rows_per_thread == 0) {
+		fprintf(stderr, "Rows per thread = 0! Your world size is too large for the given board size\n");
+		exit(EXIT_FAILURE);
+	}
+
 }
 
 // FIRST GENERATION ==============================================================================
@@ -313,6 +324,7 @@ void* simulation(void* args) {
 		pthread_barrier_wait(&barrier);
 		return EXIT_SUCCESS;
 	}
+
 
 	return 0;
 }
