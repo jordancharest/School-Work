@@ -118,6 +118,15 @@ int main(int argc, char **argv) {
 	int** heatmap = pooling(sub_matrix);
 
 
+// TODO
+/*
+	// open and write to file
+	MPI_file fh;
+	MPI_status write_status;
+	int offset = 0;
+	MPI_File_open( MPI_COMM_WORLD, "heatmap.csv", MPI_MODE_WRONLY | MPI_MODE_CREATE, MPI_INFO_NULL, &fh );
+	MPI_File_write_at( fh, offset, heatmap_rows, offset, MPI_CHAR, &write_status);
+*/
 
 
 	// Cleanup
