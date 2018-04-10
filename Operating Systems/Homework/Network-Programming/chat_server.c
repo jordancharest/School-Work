@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <ctype.h>
 #include <pthread.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -17,7 +18,8 @@
 typedef struct user {
     char userID[21];
     int active;
-    char address[20];
+    struct sockaddr_in* client;
+    char con_type[4];
 } user_t;
 
 user_t active_users[64];
@@ -57,39 +59,87 @@ int UDP_Init(struct sockaddr_in* server) {
 
 // LOGIN =========================================================================================
 void login(struct sockaddr_in* client, char* buffer) {
+    printf("User requested LOGIN\n");
 
+    int i = 6;
+    int length = 0;
+    char username[21];
 
+    // usernames must be alphanumeric
+    while (isalnum(buffer[i]) && length < 20) {
+        username[length] = buffer[i];
+        i++;
+        length++;
+    }
+    username[length] = '\0';
 
+    // validate
+    if (length == 20) {
+        printf("ERROR: userid is too long\n");
 
+    } else if (length < 3) {
+        printf("ERROR: userid is too short\n");
 
+    } else if (buffer[i] != '\n'  &&  !isalnum(buffer[i])) {
+        printf("ERROR: userid must be alphanumeric\n");
+
+    // username is valid
+    } else {
+        // TODO: only check if a TCP user is already connected
+        // ensure that the username is not taken
+        int already_connected = 0;
+        for (int j = 0; j < num_active; j++) {
+            if (strcmp(active_users[j].userID, username) == 0) {
+                printf("ERROR: Already connected\n");
+                already_connected = 1;
+                free(client);
+            }
+        }
+
+        // if it isn't, create the user profile and add it to the active users
+        if (!already_connected) {
+            user_t new_user;
+            strncpy(new_user.userID, username, length+1);
+            new_user.active = 1;
+            new_user.client = client;
+            strncpy(new_user.con_type, "UDP", 4);
+
+            printf("%s has logged in\n", new_user.userID);
+
+            active_users[num_active] = new_user;
+            num_active++;
+        }
+
+    }
+
+    printf("There are now %d active users\n", num_active);
 }
 
 
 // WHO ===========================================================================================
 void who(struct sockaddr_in* client, char* buffer) {
+    printf("User requested WHO\n");
 
-
-
-
-
+    for (int i = 0; i < num_active; i++) {
+        printf("%s\n", active_users[i].userID);
+    }
 }
 
 
 // LOGOUT ========================================================================================
 void logout(struct sockaddr_in* client, char* buffer) {
+    printf("User requested LOGOUT\n");
 
-
-
-
+    //int i = 7;
 
 }
 
 
 // SEND MESSAGE ==================================================================================
 void send_msg(struct sockaddr_in* client, char* buffer) {
+    printf("User requested SEND\n");
 
-
-
+    //int i = 5;
 
 
 }
@@ -97,8 +147,9 @@ void send_msg(struct sockaddr_in* client, char* buffer) {
 
 // BROADCAST =====================================================================================
 void broadcast(struct sockaddr_in* client, char* buffer) {
+    printf("User requested BROADCAST\n");
 
-
+    //int i = 10;
 
 
 
@@ -107,9 +158,9 @@ void broadcast(struct sockaddr_in* client, char* buffer) {
 
 // SHARE =========================================================================================
 void share(struct sockaddr_in* client, char* buffer) {
+    printf("User requested SHARE\n");
 
-
-
+    //int i = 6;
 
 
 }
@@ -158,21 +209,21 @@ void parse_command(struct sockaddr_in* client, char* buffer) {
 // HANDLE UDP DATAGRAM ===========================================================================
 void handle_UDP_datagram(int UDP_socket, fd_set* read_fd_set) {
 
-    struct sockaddr_in client;
+    struct sockaddr_in* client = malloc(sizeof *client);
     int len = sizeof client;
     char buffer[MAX_BUFFER];
 
-    int n_bytes = recvfrom(UDP_socket, buffer, MAX_BUFFER, 0, (struct sockaddr* )&client, (socklen_t* )&len);
+    int n_bytes = recvfrom(UDP_socket, buffer, MAX_BUFFER, 0, (struct sockaddr* )client, (socklen_t* )&len);
     if (n_bytes < 0) {
         perror("recvfrom() failed\n");
 
     } else {
-        printf( "Rcvd  %d byte datagram from %s port %d\n", n_bytes, inet_ntoa( client.sin_addr ), ntohs(client.sin_port) );
+        printf( "Rcvd  %d byte datagram from %s port %d\n", n_bytes, inet_ntoa( client->sin_addr ), ntohs(client->sin_port) );
         buffer[n_bytes] = '\0';
         printf("RCVD: %s\n", buffer);
     }
 
-    parse_command(&client, buffer);
+    parse_command(client, buffer);
 
 
     // clear the bit flag for this file descriptor
@@ -199,7 +250,6 @@ int main(int argc, char** argv) {
 
         FD_ZERO(&read_fd_set);
         FD_SET(UDP_socket, &read_fd_set);
-        //printf("Set FD_SET to include fd %d\n", UDP_socket);
 
         /*
         for (int i = 0; i < client_socket_index; i++) {
