@@ -78,7 +78,7 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
-
+    active_users = calloc(MAX_CLIENTS, sizeof *active_users);
     printf("MAIN: Started server\n");
     printf("MAIN: Listening for TCP connections on port: <nothing>\n");
 

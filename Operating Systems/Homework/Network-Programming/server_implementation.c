@@ -42,17 +42,14 @@ void login(int socket, struct sockaddr_in* client, char* buffer) {
     if (buffer[i] != '\n'  &&  !isalnum(buffer[i])) {
         strcpy(msg, EUSRALNUM);
         msg_len = sizeof EUSRALNUM;
-        printf(EUSRALNUM);
 
     } else if (length == 20) {
         strcpy(msg, EUSRLONG);
         msg_len = sizeof EUSRLONG;
-        printf(EUSRLONG);
 
     } else if (length < 3) {
         strcpy(msg, EUSRSHRT);
         msg_len = sizeof EUSRSHRT;
-        printf(EUSRSHRT);
 
     // username is valid
     } else {
@@ -100,17 +97,27 @@ void who(int socket, struct sockaddr_in* client, char* buffer) {
 
     char* str = malloc(num_active*20);
 
-    // build the list of signed in users
-
+    // build a string of signed in users
+    sprintf(str, "%s", ACK);
+    int j = sizeof ACK;
+    int k;
+    // for every user, maintain the index of the user and the index of the letter in the final string
     for (int i = 0; i < num_active; i++) {
-        if (i == 0) {
-            sprintf(str, "%s\n", ACK);
-        }
-        sprintf(str, "%s\n", active_users[i].userID);
-    }
+        k = 0;
 
-    // and send it
-    if ( (sendto( socket, str, num_active*20, 0, (struct sockaddr* )client, (socklen_t) sizeof(*client) ))  < 0 ) {
+        // step through the current userID and copy the letters to the final string
+        while(active_users[i].userID[k] != '\0') {
+            str[j] = active_users[i].userID[k];
+            j++;
+            k++;
+        }
+        str[j] = '\n';
+        j++;
+    }
+    str[j] = '\0';
+
+    // then send it
+    if ( (sendto( socket, str, j, 0, (struct sockaddr* )client, (socklen_t) sizeof(*client) ))  < 0 ) {
         perror("sendto() failed");
     }
 
@@ -122,18 +129,30 @@ void who(int socket, struct sockaddr_in* client, char* buffer) {
 void logout(struct sockaddr_in* client, char* buffer) {
     printf("%d requested LOGOUT\n", ntohs(client->sin_port));
 
-    user_t temp[64];
-    for (int i = 0; i < num_active; i++) {
+    user_t* temp = calloc(MAX_CLIENTS, sizeof *active_users);
+    printf("Active users: %d\n", num_active);
+    int available_users = num_active;
+    for (int i = 0, j = 0; i < available_users; i++) {
+        printf("Probing %s\n", active_users[i].userID);
+
         if (client->sin_addr.s_addr == active_users[i].client->sin_addr.s_addr  &&  client->sin_port == active_users[i].client->sin_port) {
+            printf("User %d : %s matches the user requesting logout %d\n",
+                       ntohs(active_users[i].client->sin_port), active_users[i].userID, ntohs(client->sin_port));
             num_active--;
 
         } else {
-            temp[i] = active_users[i];
+            printf("Keeping user: %s\n", active_users[i].userID);
+            temp[j] = active_users[i];
+            j++;
         }
     }
 
+    free(active_users);
+    active_users = temp;
+
+    printf("%d remaining users:\n", num_active);
     for (int i = 0; i < num_active; i++) {
-        active_users[i] = temp[i];
+        printf("%s\n", active_users[i].userID);
     }
 
 }

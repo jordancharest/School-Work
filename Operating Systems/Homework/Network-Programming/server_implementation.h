@@ -26,7 +26,7 @@ typedef struct user {
     char con_type[4];
 } user_t;
 
-user_t active_users[64];
+user_t* active_users;
 extern unsigned int num_active;
 
 
