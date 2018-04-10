@@ -11,16 +11,24 @@
 
 #include "server_implementation.h"
 
+#define ACK "OK\n"
+#define EUSRLONG "ERROR: userid is too long\n"
+#define EUSRSHRT "ERROR: userid is too short\n"
+#define EUSRALNUM "ERROR: userid must be alphanumeric\n"
+#define EUSRCONN "ERROR: Already connected\n"
+
 unsigned int num_active = 0;
 
 
 // LOGIN =========================================================================================
-void login(struct sockaddr_in* client, char* buffer) {
-    printf("User requested LOGIN\n");
+void login(int socket, struct sockaddr_in* client, char* buffer) {
+    printf("%d requested LOGIN\n", ntohs(client->sin_port));
 
     int i = 6;
+    int msg_len;
     int length = 0;
     char username[21];
+    char msg[64];
 
     // usernames must be alphanumeric
     while (isalnum(buffer[i]) && length < 20) {
@@ -31,14 +39,20 @@ void login(struct sockaddr_in* client, char* buffer) {
     username[length] = '\0';
 
     // validate
-    if (length == 20) {
-        printf("ERROR: userid is too long\n");
+    if (buffer[i] != '\n'  &&  !isalnum(buffer[i])) {
+        strcpy(msg, EUSRALNUM);
+        msg_len = sizeof EUSRALNUM;
+        printf(EUSRALNUM);
+
+    } else if (length == 20) {
+        strcpy(msg, EUSRLONG);
+        msg_len = sizeof EUSRLONG;
+        printf(EUSRLONG);
 
     } else if (length < 3) {
-        printf("ERROR: userid is too short\n");
-
-    } else if (buffer[i] != '\n'  &&  !isalnum(buffer[i])) {
-        printf("ERROR: userid must be alphanumeric\n");
+        strcpy(msg, EUSRSHRT);
+        msg_len = sizeof EUSRSHRT;
+        printf(EUSRSHRT);
 
     // username is valid
     } else {
@@ -47,9 +61,9 @@ void login(struct sockaddr_in* client, char* buffer) {
         int already_connected = 0;
         for (int j = 0; j < num_active; j++) {
             if (strcmp(active_users[j].userID, username) == 0) {
-                printf("ERROR: Already connected\n");
+                strcpy(msg, EUSRCONN);
+                printf(EUSRCONN);
                 already_connected = 1;
-                free(client);
             }
         }
 
@@ -61,6 +75,8 @@ void login(struct sockaddr_in* client, char* buffer) {
             new_user.client = client;
             strncpy(new_user.con_type, "UDP", 4);
 
+            strcpy(msg, ACK);
+            msg_len = sizeof ACK;
             printf("%s has logged in\n", new_user.userID);
 
             active_users[num_active] = new_user;
@@ -69,23 +85,42 @@ void login(struct sockaddr_in* client, char* buffer) {
 
     }
 
+    printf("Sending: %s, %d bytes, to client on port %d\n", msg, msg_len, ntohs(client->sin_port));
+    if ( (sendto( socket, msg, msg_len, 0, (struct sockaddr* )client, (socklen_t) sizeof(*client) ))  < 0 ) {
+        perror("sendto() failed");
+    }
+
     printf("There are now %d active users\n", num_active);
 }
 
 
 // WHO ===========================================================================================
-void who(struct sockaddr_in* client, char* buffer) {
-    printf("User requested WHO\n");
+void who(int socket, struct sockaddr_in* client, char* buffer) {
+    printf("%d requested WHO\n", ntohs(client->sin_port));
+
+    char* str = malloc(num_active*20);
+
+    // build the list of signed in users
 
     for (int i = 0; i < num_active; i++) {
-        printf("%s\n", active_users[i].userID);
+        if (i == 0) {
+            sprintf(str, "%s\n", ACK);
+        }
+        sprintf(str, "%s\n", active_users[i].userID);
     }
+
+    // and send it
+    if ( (sendto( socket, str, num_active*20, 0, (struct sockaddr* )client, (socklen_t) sizeof(*client) ))  < 0 ) {
+        perror("sendto() failed");
+    }
+
+    free(str);
 }
 
 
 // LOGOUT ========================================================================================
 void logout(struct sockaddr_in* client, char* buffer) {
-    printf("User requested LOGOUT\n");
+    printf("%d requested LOGOUT\n", ntohs(client->sin_port));
 
     user_t temp[64];
     for (int i = 0; i < num_active; i++) {
@@ -135,7 +170,7 @@ void share(struct sockaddr_in* client, char* buffer) {
 }
 
 // PARSE COMMAND =================================================================================
-void parse_command(struct sockaddr_in* client, char* buffer) {
+void parse_command(int socket, struct sockaddr_in* client, char* buffer) {
 
     // extract the command
     int i = 0;
@@ -149,10 +184,10 @@ void parse_command(struct sockaddr_in* client, char* buffer) {
 
     // fulfill the command
     if (strcmp(command, "LOGIN") == 0) {
-        login(client, buffer);
+        login(socket, client, buffer);
 
     } else if (strcmp(command, "WHO") == 0) {
-        who(client, buffer);
+        who(socket, client, buffer);
 
     } else if (strcmp(command, "LOGOUT") == 0) {
         logout(client, buffer);

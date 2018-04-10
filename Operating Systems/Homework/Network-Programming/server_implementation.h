@@ -14,9 +14,8 @@
 
 
 #define MAX_CLIENTS 64
-#define MAX_BUFFER 24
-#define ACK "OK\n"
-#define ACK_LENGTH 4
+#define MAX_BUFFER 1024
+
 
 
 // GLOBAL ========================================================================================
@@ -32,13 +31,13 @@ extern unsigned int num_active;
 
 
 // FUNCTION PROTOTYPES ===========================================================================
-void login(struct sockaddr_in* client, char* buffer);
-void who(struct sockaddr_in* client, char* buffer);
+void login(int socket, struct sockaddr_in* client, char* buffer);
+void who(int socket, struct sockaddr_in* client, char* buffer);
 void logout(struct sockaddr_in* client, char* buffer);
 void send_msg(struct sockaddr_in* client, char* buffer);
 void broadcast(struct sockaddr_in* client, char* buffer);
 void share(struct sockaddr_in* client, char* buffer);
-void parse_command(struct sockaddr_in* client, char* buffer);
+void parse_command(int UDP_socket, struct sockaddr_in* client, char* buffer);
 
 
 

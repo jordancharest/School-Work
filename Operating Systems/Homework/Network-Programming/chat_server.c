@@ -13,7 +13,7 @@
 
 
 // UDP INIT ======================================================================================
-int UDP_Init(struct sockaddr_in* server) {
+int UDP_Init(struct sockaddr_in* server, int port) {
     int sd;
                     /* IPv4,      UDP, default */
     if ( (sd = socket(AF_INET, SOCK_DGRAM, 0)) < 0 ) {
@@ -25,7 +25,7 @@ int UDP_Init(struct sockaddr_in* server) {
     server->sin_addr.s_addr = htonl(INADDR_ANY);
 
     // specify the port number for the server
-    server->sin_port = htons(12345); // 0 means let the kernel assign us a port number
+    server->sin_port = htons(port); // 0 means let the kernel assign us a port number
 
     // bind to OS-assigned port number
     if ( bind (sd, (struct sockaddr* )server, sizeof(*server)) < 0) {
@@ -39,7 +39,8 @@ int UDP_Init(struct sockaddr_in* server) {
         exit(EXIT_FAILURE);
     }
 
-    printf("UDP Server initialized at port number %d\n", ntohs(server->sin_port));
+    printf("MAIN: Listening for UDP datagrams on port: %d", ntohs(server->sin_port));
+    fflush(stdout);
 
     return sd;
 }
@@ -60,10 +61,9 @@ void handle_UDP_datagram(int UDP_socket, fd_set* read_fd_set) {
         printf( "Rcvd  %d byte datagram from %s port %d\n", n_bytes, inet_ntoa( client->sin_addr ), ntohs(client->sin_port) );
         buffer[n_bytes] = '\0';
         printf("RCVD: %s\n", buffer);
+
+        parse_command(UDP_socket, client, buffer);
     }
-
-    parse_command(client, buffer);
-
 
     // clear the bit flag for this file descriptor
     FD_CLR(UDP_socket, read_fd_set);
@@ -73,8 +73,17 @@ void handle_UDP_datagram(int UDP_socket, fd_set* read_fd_set) {
 // MAIN ==========================================================================================
 int main(int argc, char** argv) {
 
+    if (argc != 2) {
+        fprintf(stderr, "ERROR: invalid argument(s)\nUSAGE: %s <UDP_Port>\n", argv[0]);
+        return EXIT_FAILURE;
+    }
+
+
+    printf("MAIN: Started server\n");
+    printf("MAIN: Listening for TCP connections on port: <nothing>\n");
+
     struct sockaddr_in server;
-    int UDP_socket = UDP_Init(&server);
+    int UDP_socket = UDP_Init(&server, atoi(argv[1]));
 
     fd_set read_fd_set;
 
