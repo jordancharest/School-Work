@@ -130,7 +130,19 @@ void who(struct sockaddr_in* client, char* buffer) {
 void logout(struct sockaddr_in* client, char* buffer) {
     printf("User requested LOGOUT\n");
 
-    //int i = 7;
+    user_t temp[64];
+    for (int i = 0; i < num_active; i++) {
+        if (client->sin_addr.s_addr == active_users[i].client->sin_addr.s_addr) {
+            num_active--;
+
+        } else {
+            temp[i] = active_users[i];
+        }
+    }
+
+    for (int i = 0; i < num_active; i++) {
+        active_users[i] = temp[i];
+    }
 
 }
 
