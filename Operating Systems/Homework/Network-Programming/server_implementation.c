@@ -219,6 +219,8 @@ void logout(int socket, struct sockaddr_in* client, char* buffer) {
 void send_msg(int socket, struct sockaddr_in* client, char* buffer) {
     printf("User requested SEND\n");
 
+    int error = 0;
+
     // figure out who is sending the message
     char sender[21];
     int sender_len = 0;
@@ -226,15 +228,13 @@ void send_msg(int socket, struct sockaddr_in* client, char* buffer) {
 
 
     int i = 5;
-    int return_msg_len;
-
     int length = 0;
-    char recipient[21];
-    int recipient_index;
+
+    int return_msg_len;
     char return_msg[64];
 
-
-    int error = 0;
+    char recipient[21];
+    int recipient_index;
 
     // extract the recipient username from the command
     while (!isspace(buffer[i]) && length < 20) {
@@ -243,8 +243,6 @@ void send_msg(int socket, struct sockaddr_in* client, char* buffer) {
         length++;
     }
     recipient[length] = '\0';
-
-    fprintf(stderr, "Sending to: %s\n", recipient);
 
     // search for the recipient in the list of active users
     int j = 0;
@@ -268,11 +266,10 @@ void send_msg(int socket, struct sockaddr_in* client, char* buffer) {
     }
 
 
+    // extract the message from the sender command
     int buf_index = i+1;
     char client_msg_len[4];
     int full_client_msg_len = 9 + sender_len;   // add 9 to account for spaces/newline/null byte and "FROM"
-
-
 
     char* client_msg = extract_message("SEND", buffer, buf_index, &error, &full_client_msg_len, client_msg_len, &return_msg_len, return_msg);
 
@@ -313,14 +310,12 @@ void broadcast(int socket, struct sockaddr_in* client, char* buffer) {
     int sender_len = 0;
     determine_sender(client, sender, &sender_len);
 
-
-
+    // extract the message from the sender command
     int error = 0;
     int return_msg_len;
     char client_msg_len[4];
     char return_msg[64];
     int buf_index = 10;
-
     int full_client_msg_len = 9 + sender_len;   // add 9 to account for spaces/newline/null byte and "FROM"
 
     char* client_msg = extract_message("SEND", buffer, buf_index, &error, &full_client_msg_len, client_msg_len, &return_msg_len, return_msg);
