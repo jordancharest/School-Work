@@ -22,6 +22,7 @@
 typedef struct user {
     char userID[21];
     int active;
+    int socket;
     struct sockaddr_in* client;
     char con_type[4];
 } user_t;
@@ -33,8 +34,8 @@ extern unsigned int num_active;
 // FUNCTION PROTOTYPES ===========================================================================
 void login(int socket, struct sockaddr_in* client, char* buffer);
 void who(int socket, struct sockaddr_in* client, char* buffer);
-void logout(struct sockaddr_in* client, char* buffer);
-void send_msg(struct sockaddr_in* client, char* buffer);
+void logout(int socket, struct sockaddr_in* client, char* buffer);
+void send_msg(int socket, struct sockaddr_in* client, char* buffer);
 void broadcast(struct sockaddr_in* client, char* buffer);
 void share(struct sockaddr_in* client, char* buffer);
 void parse_command(int UDP_socket, struct sockaddr_in* client, char* buffer);
