@@ -77,6 +77,7 @@ void login(int socket, struct sockaddr_in* client, char* buffer) {
             new_user.active = 1;
             new_user.client = client;
             new_user.socket = socket;
+            new_user.name_len = length;
             strncpy(new_user.con_type, "UDP", 4);
 
             strcpy(msg, ACK);
@@ -173,13 +174,29 @@ void logout(int socket, struct sockaddr_in* client, char* buffer) {
 void send_msg(int socket, struct sockaddr_in* client, char* buffer) {
     printf("User requested SEND\n");
 
+    // figure out who is sending the message
+    char sender[21];
+    int sender_len = 0;
+    for (int i = 0; i < num_active; i++) {
+        if (client->sin_addr.s_addr == active_users[i].client->sin_addr.s_addr  &&  client->sin_port == active_users[i].client->sin_port) {
+            strcpy(sender, active_users[i].userID);
+            sender_len = active_users[i].name_len;
+            break;
+        }
+    }
+
+
+
+
     int i = 5;
     int msg_len;
     char client_msg_len[4];
+
     int length = 0;
     char recipient[21];
     int recipient_index;
     char msg[64];
+
 
     int error = 0;
 
@@ -233,17 +250,30 @@ void send_msg(int socket, struct sockaddr_in* client, char* buffer) {
     }
 
 
-    // extract the client message from the command
+    int full_client_msg_len = 9;    // start at 9 to account for spaces/newline/null byte and "FROM"
+    full_client_msg_len += (cml + length + sender_len);
+
     char* client_msg = malloc(cml + 2);
     length = 0;
     i++;
-    while (!isspace(buffer[i])  &&  length < cml) {
+
+    // extract the client message from the command
+    while (buffer[i] != '\0'  &&  length < cml) {
         client_msg[length] = buffer[i];
         i++;
         length++;
     }
     client_msg[length] = '\n';
     client_msg[length+1] = '\0';
+
+    // build the full message string
+    char* full_client_msg = malloc(cml + 30);
+    strcpy(full_client_msg, "FROM ");
+    strcat(full_client_msg, sender);
+    strcat(full_client_msg, " ");
+    strcat(full_client_msg, client_msg_len);
+    strcat(full_client_msg, " ");
+    strcat(full_client_msg, client_msg);
 
     // send acknowledgement/error message to the sender
     if ( (sendto( socket, msg, msg_len, 0, (struct sockaddr* )client, (socklen_t) sizeof(*client) ))  < 0 ) {
@@ -252,7 +282,7 @@ void send_msg(int socket, struct sockaddr_in* client, char* buffer) {
 
     // send the client message to the recipient
     if (!error) {
-        if ( (sendto( active_users[recipient_index].socket, client_msg, cml+2, 0, (struct sockaddr* )active_users[recipient_index].client, (socklen_t) sizeof(*(active_users[recipient_index].client)) ))  < 0 ) {
+        if ( (sendto( active_users[recipient_index].socket, full_client_msg, full_client_msg_len, 0, (struct sockaddr* )active_users[recipient_index].client, (socklen_t) sizeof(*(active_users[recipient_index].client)) ))  < 0 ) {
             perror("sendto() failed");
         }
     }

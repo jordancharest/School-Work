@@ -23,6 +23,7 @@ typedef struct user {
     char userID[21];
     int active;
     int socket;
+    int name_len;
     struct sockaddr_in* client;
     char con_type[4];
 } user_t;
