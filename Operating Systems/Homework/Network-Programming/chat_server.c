@@ -128,32 +128,46 @@ int main(int argc, char** argv) {
 
     fd_set read_fd_set;
 
-    //int client_sockets[MAX_CLIENTS];
-    //int client_socket_index = 0;
+    int client_sockets[MAX_CLIENTS];
+    int client_socket_index = 0;
 
     while (1) {
         struct timeval timeout;
         timeout.tv_sec = 60;
         timeout.tv_usec = 500;  // 60 AND 500 microseconds
 
+        // reset the fd set for TCP listener and UDP
         FD_ZERO(&read_fd_set);
         FD_SET(UDP_socket, &read_fd_set);
+        FD_SET(TCP_listener, &read_fd_set);
 
-        /*
+        // reset the fd's for all connected TCP clients
         for (int i = 0; i < client_socket_index; i++) {
             FD_SET(client_sockets[ i ], &read_fd_set);
             printf("Set FD_SET to include client socket fd %d\n", client_sockets[i]);
         }
-        */
+
         // look for UDP datagrams or TCP connection requests
         int ready = select(FD_SETSIZE, &read_fd_set, NULL, NULL, &timeout);
         if (ready == 0) {
             printf("No activity\n");
             continue;
 
-        // Received a UDP datagram
-        } else if (FD_ISSET(UDP_socket, &read_fd_set)) {
-            handle_UDP_datagram(UDP_socket, &read_fd_set);
+        // at least one connection occurred
+        } else {
+            // check for UDP datagram
+            if (FD_ISSET(UDP_socket, &read_fd_set))
+                handle_UDP_datagram(UDP_socket, &read_fd_set);
+
+            // check for new connection requests on the listener
+            if (FD_ISSET(TCP_listener, &read_fd_set)) {
+                struct sockaddr_in* client = malloc(sizeof *client);
+                int len = sizeof *client;
+                int new_socket = accept(TCP_listener, (struct sockaddr* )client, (socklen_t* )&len);
+
+                // offload the TCP connection to a new thread
+                // pthread_create...
+            }
         }
     }
 
