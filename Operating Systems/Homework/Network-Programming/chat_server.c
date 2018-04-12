@@ -102,12 +102,17 @@ int TCP_Init(struct sockaddr_in* server, int port) {
     fflush(stdout);
 
     return sd;
-
-
-
-
 }
 
+
+// HANDLE TCP CONNECTION =========================================================================
+void* handle_TCP_connection (void* args) {
+
+
+
+
+    return NULL;
+}
 
 // MAIN ==========================================================================================
 int main(int argc, char** argv) {
