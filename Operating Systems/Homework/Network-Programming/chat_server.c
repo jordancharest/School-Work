@@ -25,20 +25,21 @@ int UDP_Init(struct sockaddr_in* server, int port) {
     server->sin_addr.s_addr = htonl(INADDR_ANY);
 
     // specify the port number for the server
-    server->sin_port = htons(port); // 0 means let the kernel assign us a port number
+    server->sin_port = htons(port);
 
-    // bind to OS-assigned port number
+    // bind to user assigned port number
     if ( bind (sd, (struct sockaddr* )server, sizeof(*server)) < 0) {
         perror("bind() failed");
         exit(EXIT_FAILURE);
     }
 
+    /*
     int length = sizeof(*server);
     if ( getsockname(sd, (struct sockaddr *)server, (socklen_t *)&length) < 0 ) {
         perror("getsockname() failed");
         exit(EXIT_FAILURE);
     }
-
+*/
     printf("MAIN: Listening for UDP datagrams on port: %d", ntohs(server->sin_port));
     fflush(stdout);
 
@@ -55,7 +56,7 @@ void handle_UDP_datagram(int UDP_socket, fd_set* read_fd_set) {
 
     int n_bytes = recvfrom(UDP_socket, buffer, MAX_BUFFER, 0, (struct sockaddr* )client, (socklen_t* )&len);
     if (n_bytes < 0) {
-        perror("recvfrom() failed\n");
+        perror("recvfrom() failed");
 
     } else {
         printf( "Rcvd  %d byte datagram from %s port %d\n", n_bytes, inet_ntoa( client->sin_addr ), ntohs(client->sin_port) );
@@ -66,30 +67,69 @@ void handle_UDP_datagram(int UDP_socket, fd_set* read_fd_set) {
     }
 
     // clear the bit flag for this file descriptor
-    FD_CLR(UDP_socket, read_fd_set);
+    //FD_CLR(UDP_socket, read_fd_set);
+}
+
+
+// TCP INIT ======================================================================================
+int TCP_Init(struct sockaddr_in* server, int port) {
+    int sd;
+
+    // Create the listener socket as TCP socket
+    if ( (sd = socket( PF_INET, SOCK_STREAM, 0 )) < 0 ) {       // note that PF_INET is protocol family, Internet
+        perror("socket() failed");
+        exit(EXIT_FAILURE);
+    }
+
+    server->sin_family = PF_INET;
+    server->sin_addr.s_addr = htonl(INADDR_ANY);    // allow any IP address to connect
+
+    server->sin_port = port;    // assign the port number specified in command line argument
+
+    // bind to user assigned port number
+    if ( bind(sd, (struct sockaddr* )server, sizeof(*server)) < 0) {
+        perror("bind() failed");
+        exit(EXIT_FAILURE);
+    }
+
+    // identify the port as a listener
+    if ( listen(sd, 5) < 0) {
+        perror("listen() failed");
+        exit(EXIT_FAILURE);
+    }
+
+    printf("MAIN: Listening for TCP connections on port: %d", ntohs(server->sin_port));
+    fflush(stdout);
+
+    return sd;
+
+
+
+
 }
 
 
 // MAIN ==========================================================================================
 int main(int argc, char** argv) {
 
-    if (argc != 2) {
-        fprintf(stderr, "ERROR: invalid argument(s)\nUSAGE: %s <UDP_Port>\n", argv[0]);
+    if (argc != 3) {
+        fprintf(stderr, "ERROR: invalid argument(s)\nUSAGE: %s <TCP-port> <UDP-port>\n", argv[0]);
         return EXIT_FAILURE;
     }
 
-    active_users = calloc(MAX_CLIENTS, sizeof *active_users);
     printf("MAIN: Started server\n");
-    printf("MAIN: Listening for TCP connections on port: <nothing>\n");
+    active_users = calloc(MAX_CLIENTS, sizeof *active_users);
 
-    struct sockaddr_in server;
-    int UDP_socket = UDP_Init(&server, atoi(argv[1]));
+    struct sockaddr_in TCP_server;
+    int TCP_listener = TCP_Init(&TCP_server, atoi(argv[1]));
+
+    struct sockaddr_in UDP_server;
+    int UDP_socket = UDP_Init(&UDP_server, atoi(argv[2]));
 
     fd_set read_fd_set;
 
     //int client_sockets[MAX_CLIENTS];
     //int client_socket_index = 0;
-
 
     while (1) {
         struct timeval timeout;
@@ -116,6 +156,8 @@ int main(int argc, char** argv) {
             handle_UDP_datagram(UDP_socket, &read_fd_set);
         }
     }
+
+    free(active_users);
 
     return EXIT_SUCCESS;
 }
