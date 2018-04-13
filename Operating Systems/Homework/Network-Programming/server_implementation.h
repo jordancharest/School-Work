@@ -35,7 +35,7 @@ extern unsigned int num_active;
 // FUNCTION PROTOTYPES ===========================================================================
 void login(int socket, struct sockaddr_in* client, char* buffer);
 void who(int socket, struct sockaddr_in* client, char* buffer);
-void logout(int socket, struct sockaddr_in* client, char* buffer);
+void logout(int socket, struct sockaddr_in* client);
 void send_msg(int socket, struct sockaddr_in* client, char* buffer);
 void broadcast(int socket, struct sockaddr_in* client, char* buffer);
 void share(int socket, struct sockaddr_in* client, char* buffer);

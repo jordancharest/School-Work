@@ -179,7 +179,7 @@ void who(int socket, struct sockaddr_in* client, char* buffer) {
 
 
 // LOGOUT ========================================================================================
-void logout(int socket, struct sockaddr_in* client, char* buffer) {
+void logout(int socket, struct sockaddr_in* client) {
     printf("%d requested LOGOUT\n", ntohs(client->sin_port));
 
     user_t* temp = calloc(MAX_CLIENTS, sizeof *active_users);
@@ -387,7 +387,7 @@ void parse_command(int socket, struct sockaddr_in* client, char* buffer) {
         who(socket, client, buffer);
 
     } else if (strcmp(command, "LOGOUT") == 0) {
-        logout(socket, client, buffer);
+        logout(socket, client);
 
     } else if (strcmp(command, "SEND") == 0) {
         send_msg(socket, client, buffer);

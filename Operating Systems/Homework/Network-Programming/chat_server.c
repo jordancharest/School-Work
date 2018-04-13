@@ -11,6 +11,11 @@
 
 #include "server_implementation.h"
 
+typedef struct thread_args {
+    int socket;
+    struct sockaddr_in* client;
+} TA_t;
+
 
 // UDP INIT ======================================================================================
 int UDP_Init(struct sockaddr_in* server, int port) {
@@ -59,9 +64,8 @@ void handle_UDP_datagram(int UDP_socket, fd_set* read_fd_set) {
         perror("recvfrom() failed");
 
     } else {
-        printf( "Rcvd  %d byte datagram from %s port %d\n", n_bytes, inet_ntoa( client->sin_addr ), ntohs(client->sin_port) );
+        printf("MAIN: Rcvd incoming UDP datagram from: %s\n", n_bytes, inet_ntoa(client->sin_addr));
         buffer[n_bytes] = '\0';
-        printf("RCVD: %s\n", buffer);
 
         parse_command(UDP_socket, client, buffer);
     }
@@ -106,9 +110,44 @@ int TCP_Init(struct sockaddr_in* server, int port) {
 
 
 // HANDLE TCP CONNECTION =========================================================================
+/*  Thread function                                                                             */
 void* handle_TCP_connection (void* args) {
 
+    // automatically clean up thread resources
+    pthread_detach(pthread_self());
 
+    TA_t* thread_args = (TA_t*)args;
+    int socket = thread_args->socket;
+    struct sockaddr_in* client = thread_args->client;
+
+    char buffer[MAX_BUFFER];
+
+    // make a new local fd_set; only care about the socket descriptor, and don't want to synchronize with main thread
+    fd_set read_fd_set;
+
+    // loop until the connection is closed
+    while (1) {
+        FD_CLR(socket, &read_fd_set);
+        FD_SET(socket, &read_fd_set);
+
+        if ( FD_ISSET(socket, &read_fd_set) ) {
+            int n_bytes = recv(socket, buffer, MAX_BUFFER, 0);
+            if (n_bytes < 0) {
+                perror("recv() failed");
+
+            // client closed the connection
+            } else if (n_bytes == 0) {
+                printf("Client closed the connection...closing socket\n");
+                logout(socket, client);
+                break;
+
+            } else {
+                buffer[n_bytes] = '\0';
+
+                parse_command(socket, client, buffer);
+            }
+        }
+    }
 
 
     return NULL;
@@ -133,9 +172,6 @@ int main(int argc, char** argv) {
 
     fd_set read_fd_set;
 
-    int client_sockets[MAX_CLIENTS];
-    int client_socket_index = 0;
-
     while (1) {
         struct timeval timeout;
         timeout.tv_sec = 60;
@@ -145,12 +181,6 @@ int main(int argc, char** argv) {
         FD_ZERO(&read_fd_set);
         FD_SET(UDP_socket, &read_fd_set);
         FD_SET(TCP_listener, &read_fd_set);
-
-        // reset the fd's for all connected TCP clients
-        for (int i = 0; i < client_socket_index; i++) {
-            FD_SET(client_sockets[ i ], &read_fd_set);
-            printf("Set FD_SET to include client socket fd %d\n", client_sockets[i]);
-        }
 
         // look for UDP datagrams or TCP connection requests
         int ready = select(FD_SETSIZE, &read_fd_set, NULL, NULL, &timeout);
@@ -164,7 +194,7 @@ int main(int argc, char** argv) {
             if (FD_ISSET(UDP_socket, &read_fd_set))
                 handle_UDP_datagram(UDP_socket, &read_fd_set);
 
-            // check for new connection requests on the listener
+            // check for new TCP connection requests on the listener
             if (FD_ISSET(TCP_listener, &read_fd_set)) {
                 struct sockaddr_in* client = malloc(sizeof *client);
                 int len = sizeof *client;
@@ -173,12 +203,21 @@ int main(int argc, char** argv) {
                 if (new_socket < 0)
                     perror("accept() failed");
 
+                // connection established
                 else {
-                    printf("TCP_connection accepted on port %s\n", argv[1]);
+                    printf("MAIN: Rcvd incoming TCP_connection from: %s\n", inet_ntoa(client->sin_addr));
                     fflush(stdout);
 
+                    pthread_t tid;
+                    TA_t send_args;
+                    send_args.socket = new_socket;
+                    send_args.client = client;
+
                     // offload the TCP connection to a new thread
-                    // pthread_create...
+                    if ( pthread_create( &tid, NULL, handle_TCP_connection, (void*)&send_args ) != 0 ) {
+                        fprintf( stderr, "ERROR: Could not create thread\n" );
+                        exit(EXIT_FAILURE);
+                    }
                 }
             }
         }
