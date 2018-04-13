@@ -40,7 +40,7 @@ int UDP_Init(struct sockaddr_in* server, int port) {
         exit(EXIT_FAILURE);
     }
 */
-    printf("MAIN: Listening for UDP datagrams on port: %d", ntohs(server->sin_port));
+    printf("MAIN: Listening for UDP datagrams on port: %d\n", ntohs(server->sin_port));
     fflush(stdout);
 
     return sd;
@@ -84,7 +84,7 @@ int TCP_Init(struct sockaddr_in* server, int port) {
     server->sin_family = PF_INET;
     server->sin_addr.s_addr = htonl(INADDR_ANY);    // allow any IP address to connect
 
-    server->sin_port = port;    // assign the port number specified in command line argument
+    server->sin_port = htons(port);    // assign the port number specified in command line argument
 
     // bind to user assigned port number
     if ( bind(sd, (struct sockaddr* )server, sizeof(*server)) < 0) {
@@ -98,7 +98,7 @@ int TCP_Init(struct sockaddr_in* server, int port) {
         exit(EXIT_FAILURE);
     }
 
-    printf("MAIN: Listening for TCP connections on port: %d", ntohs(server->sin_port));
+    printf("MAIN: Listening for TCP connections on port: %d\n", ntohs(server->sin_port));
     fflush(stdout);
 
     return sd;
@@ -168,10 +168,18 @@ int main(int argc, char** argv) {
             if (FD_ISSET(TCP_listener, &read_fd_set)) {
                 struct sockaddr_in* client = malloc(sizeof *client);
                 int len = sizeof *client;
-                int new_socket = accept(TCP_listener, (struct sockaddr* )client, (socklen_t* )&len);
 
-                // offload the TCP connection to a new thread
-                // pthread_create...
+                int new_socket = accept(TCP_listener, (struct sockaddr* )client, (socklen_t* )&len);
+                if (new_socket < 0)
+                    perror("accept() failed");
+
+                else {
+                    printf("TCP_connection accepted on port %s\n", argv[1]);
+                    fflush(stdout);
+
+                    // offload the TCP connection to a new thread
+                    // pthread_create...
+                }
             }
         }
     }
