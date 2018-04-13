@@ -25,21 +25,22 @@ typedef struct user {
     int socket;
     int name_len;
     struct sockaddr_in* client;
-    char con_type[4];
+    char conn_type[4];
 } user_t;
 
 user_t* active_users;
 extern unsigned int num_active;
+extern pthread_t master_thread;
 
 
 // FUNCTION PROTOTYPES ===========================================================================
-void login(int socket, struct sockaddr_in* client, char* buffer);
+void login(int socket, struct sockaddr_in* client, char* buffer, char* conn_type);
 void who(int socket, struct sockaddr_in* client, char* buffer);
 void logout(int socket, struct sockaddr_in* client);
 void send_msg(int socket, struct sockaddr_in* client, char* buffer);
 void broadcast(int socket, struct sockaddr_in* client, char* buffer);
-void share(int socket, struct sockaddr_in* client, char* buffer);
-void parse_command(int UDP_socket, struct sockaddr_in* client, char* buffer);
+void share(int socket, struct sockaddr_in* client, char* buffer, char* conn_type);
+void parse_command(int UDP_socket, struct sockaddr_in* client, char* buffer, char* conn_type);
 
 
 

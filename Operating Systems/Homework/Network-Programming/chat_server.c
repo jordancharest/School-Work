@@ -16,6 +16,8 @@ typedef struct thread_args {
     struct sockaddr_in* client;
 } TA_t;
 
+pthread_t master_thread;
+
 
 // UDP INIT ======================================================================================
 int UDP_Init(struct sockaddr_in* server, int port) {
@@ -64,10 +66,10 @@ void handle_UDP_datagram(int UDP_socket, fd_set* read_fd_set) {
         perror("recvfrom() failed");
 
     } else {
-        printf("MAIN: Rcvd incoming UDP datagram from: %s\n", n_bytes, inet_ntoa(client->sin_addr));
+        printf("MAIN: Rcvd incoming UDP datagram from: %s\n", inet_ntoa(client->sin_addr));
         buffer[n_bytes] = '\0';
 
-        parse_command(UDP_socket, client, buffer);
+        parse_command(UDP_socket, client, buffer, "UDP");
     }
 
     // clear the bit flag for this file descriptor
@@ -85,7 +87,7 @@ int TCP_Init(struct sockaddr_in* server, int port) {
         exit(EXIT_FAILURE);
     }
 
-    server->sin_family = PF_INET;
+    server->sin_family = AF_INET;
     server->sin_addr.s_addr = htonl(INADDR_ANY);    // allow any IP address to connect
 
     server->sin_port = htons(port);    // assign the port number specified in command line argument
@@ -144,7 +146,7 @@ void* handle_TCP_connection (void* args) {
             } else {
                 buffer[n_bytes] = '\0';
 
-                parse_command(socket, client, buffer);
+                parse_command(socket, client, buffer, "TCP");
             }
         }
     }
@@ -162,6 +164,7 @@ int main(int argc, char** argv) {
     }
 
     printf("MAIN: Started server\n");
+    master_thread = pthread_self();
     active_users = calloc(MAX_CLIENTS, sizeof *active_users);
 
     struct sockaddr_in TCP_server;

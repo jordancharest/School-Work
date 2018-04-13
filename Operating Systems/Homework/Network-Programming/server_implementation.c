@@ -25,15 +25,18 @@
 unsigned int num_active = 0;
 
 // DETERMINE SENDER ==============================================================================
-/*  Determine the username of the sender in a SEND, BROADCAST or SHARE operation                */
-void determine_sender(struct sockaddr_in* client, char* sender, int* sender_len) {
+/*  Determine the sender of a request to see if they are logged in                              */
+int determine_sender(struct sockaddr_in* client, char* sender) {
     for (int i = 0; i < num_active; i++) {
+
+        // sender found
         if (client->sin_addr.s_addr == active_users[i].client->sin_addr.s_addr  &&  client->sin_port == active_users[i].client->sin_port) {
             strcpy(sender, active_users[i].userID);
-            *sender_len = active_users[i].name_len;
-            break;
+            return active_users[i].name_len;
         }
     }
+
+    return 0;   // sender not found, must LOGIN first
 }
 
 // EXTRACT MESSAGE ===============================================================================
@@ -77,8 +80,7 @@ char* extract_message(char* command, char* buffer, int buf_index, int* error, in
 
 
 // LOGIN =========================================================================================
-void login(int socket, struct sockaddr_in* client, char* buffer) {
-    printf("%d requested LOGIN\n", ntohs(client->sin_port));
+void login(int socket, struct sockaddr_in* client, char* buffer, char* conn_type) {
 
     int i = 6;
     int msg_len;
@@ -86,7 +88,7 @@ void login(int socket, struct sockaddr_in* client, char* buffer) {
     char username[21];
     char msg[64];
 
-    // usernames must be alphanumeric
+    // extract the requested userID
     while (isalnum(buffer[i]) && length < 20) {
         username[length] = buffer[i];
         i++;
@@ -94,7 +96,16 @@ void login(int socket, struct sockaddr_in* client, char* buffer) {
     }
     username[length] = '\0';
 
-    // validate
+
+    if (pthread_self() == master_thread)
+        printf("MAIN: ");
+    else
+        printf("CHILD %u: ", (unsigned int)pthread_self());
+
+    printf("Rcvd LOGIN request for userid %s\n", username);
+
+
+    // validate the userid
     if (buffer[i] != '\n'  &&  !isalnum(buffer[i])) {
         strcpy(msg, EUSRALNUM);
         msg_len = sizeof EUSRALNUM;
@@ -109,19 +120,43 @@ void login(int socket, struct sockaddr_in* client, char* buffer) {
 
     // username is valid
     } else {
-        // TODO: only check if a TCP user is already connected
+        int already_have_username = 0;
+        char sender[21];
+        int already_logged_in = determine_sender(client, sender);
+
+        // if the sender is asking to log in with the same user name, let them know (a different username is valid)
+        if (strcmp(sender, username) == 0)
+            already_have_username = 1;
+
         // ensure that the username is not taken
-        int already_connected = 0;
+        int user_already_exists = 0;
         for (int j = 0; j < num_active; j++) {
-            if (strcmp(active_users[j].userID, username) == 0) {
+
+            int same_user = strcmp(active_users[j].userID, username);
+
+            // UDP users get preempted, TCP users maintain their connection
+            if ((same_user == 0  &&  strcmp(active_users[j].conn_type, "TCP") == 0)  ||  already_have_username) {
                 strcpy(msg, EUSRCONN);
+                msg_len = sizeof EUSRCONN;
                 printf(EUSRCONN);
-                already_connected = 1;
+                user_already_exists = 1;
+                break;
+
+            // UDP: log the previous user out
+            } else if (same_user == 0) {
+                printf("USP user is getting preempted\n");
+                logout(active_users[j].socket, active_users[j].client);
             }
         }
 
-        // if it isn't, create the user profile and add it to the active users
-        if (!already_connected) {
+        // if this IP address and port already has a different username, log the previous username out
+        if (already_logged_in  &&  !user_already_exists  &&  strcmp(sender, username) != 0){
+            printf("This IP is already logged in, logging out first...\n");
+            logout(socket, client);
+        }
+
+        // if the username isn't taken, create the user profile and add it to the active users
+        if (!user_already_exists) {
             user_t new_user;
             strncpy(new_user.userID, username, length+1);
 
@@ -129,7 +164,7 @@ void login(int socket, struct sockaddr_in* client, char* buffer) {
             new_user.client = client;
             new_user.socket = socket;
             new_user.name_len = length;
-            strncpy(new_user.con_type, "UDP", 4);
+            strcpy(new_user.conn_type, conn_type);
 
             strcpy(msg, ACK);
             msg_len = sizeof ACK;
@@ -223,8 +258,7 @@ void send_msg(int socket, struct sockaddr_in* client, char* buffer) {
 
     // figure out who is sending the message
     char sender[21];
-    int sender_len = 0;
-    determine_sender(client, sender, &sender_len);
+    int sender_len = determine_sender(client, sender);
 
 
     int i = 5;
@@ -307,8 +341,7 @@ void broadcast(int socket, struct sockaddr_in* client, char* buffer) {
 
     // figure out who is sending the message
     char sender[21];
-    int sender_len = 0;
-    determine_sender(client, sender, &sender_len);
+    int sender_len = determine_sender(client, sender);
 
     // extract the message from the sender command
     int error = 0;
@@ -358,7 +391,7 @@ void broadcast(int socket, struct sockaddr_in* client, char* buffer) {
 
 
 // SHARE =========================================================================================
-void share(int socket, struct sockaddr_in* client, char* buffer) {
+void share(int socket, struct sockaddr_in* client, char* buffer, char* conn_type) {
     printf("User requested SHARE\n");
 
     //int i = 6;
@@ -367,7 +400,7 @@ void share(int socket, struct sockaddr_in* client, char* buffer) {
 }
 
 // PARSE COMMAND =================================================================================
-void parse_command(int socket, struct sockaddr_in* client, char* buffer) {
+void parse_command(int socket, struct sockaddr_in* client, char* buffer, char* conn_type) {
 
     // extract the command
     int i = 0;
@@ -381,7 +414,7 @@ void parse_command(int socket, struct sockaddr_in* client, char* buffer) {
 
     // fulfill the command
     if (strcmp(command, "LOGIN") == 0) {
-        login(socket, client, buffer);
+        login(socket, client, buffer, conn_type);
 
     } else if (strcmp(command, "WHO") == 0) {
         who(socket, client, buffer);
@@ -396,7 +429,7 @@ void parse_command(int socket, struct sockaddr_in* client, char* buffer) {
         broadcast(socket, client, buffer);
 
     } else if (strcmp(command, "SHARE") == 0) {
-        share(socket, client, buffer);
+        share(socket, client, buffer, conn_type);
 
     } else {
         printf("ERROR: unknown command. Valid commands are:\n LOGIN\n WHO\n LOGOUT\n SEND\n BROADCAST\n SHARE\n");
