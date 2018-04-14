@@ -21,6 +21,7 @@
 // SEND Errors
 #define EUSRUNKNWN "ERROR: Unknown userid\n"
 #define EINVMSGLEN "ERROR: Invalid msglen\n"
+#define ELOGINFIRST "ERROR: Must LOGIN first\n"
 
 unsigned int num_active = 0;
 
@@ -102,9 +103,7 @@ void login_valid_username(int socket, struct sockaddr_in* client, char* username
     int* logout_socket = malloc(sizeof *logout_socket);
 
     // ensure that the username is not taken
-    fprintf(stderr, "Taking lock\n");
     pthread_mutex_lock(&user_lock);
-    fprintf(stderr, "Successfully took lock\n");
         for (int j = 0; j < num_active; j++) {
 
             int same_user = strcmp(active_users[j].userID, username);
@@ -125,13 +124,10 @@ void login_valid_username(int socket, struct sockaddr_in* client, char* username
             }
         }
     pthread_mutex_unlock(&user_lock);
-    fprintf(stderr, "Released lock\n");
 
-    // logout procedure moved outside of mutex to reduce lock time needed
+    // logout procedure moved outside of mutex to avoid deadlock (LOGOUT also needs the user_lock)
     if (logout_needed) {
-        printf("Logout needed\n");
         logout(*logout_socket, logout_client);
-        printf("Logout completed\n");
     }
     free(logout_socket);
 
@@ -210,7 +206,7 @@ void login_attempt(int socket, struct sockaddr_in* client, char* buffer, char* c
         login_valid_username(socket, client, username, msg, &msg_len, length, conn_type);
     }
 
-    printf("Sending: %s, %d bytes, to client on port %d\n", msg, msg_len, ntohs(client->sin_port));
+    // printf("Sending: %s, %d bytes, to client on port %d\n", msg, msg_len, ntohs(client->sin_port));
     if ( (sendto( socket, msg, msg_len, 0, (struct sockaddr* )client, (socklen_t) sizeof(*client) ))  < 0 ) {
         perror("sendto() failed");
     }
@@ -220,6 +216,7 @@ void login_attempt(int socket, struct sockaddr_in* client, char* buffer, char* c
 
 
 // WHO ===========================================================================================
+/*  Sends a list of active users to the requester (works even if requester is not logged in)    */
 void who(int socket, struct sockaddr_in* client, char* buffer) {
     printf("%d requested WHO\n", ntohs(client->sin_port));
 
@@ -251,29 +248,33 @@ void who(int socket, struct sockaddr_in* client, char* buffer) {
 void logout(int socket, struct sockaddr_in* client) {
     printf("%d requested LOGOUT\n", ntohs(client->sin_port));
 
-    user_t* temp = calloc(MAX_CLIENTS, sizeof *active_users);
+    user_t* temp = calloc(MAX_CLIENTS, sizeof *temp);
     printf("Active users: %d\n", num_active);
-    int available_users = num_active;
-    for (int i = 0, j = 0; i < available_users; i++) {
 
-        if (client->sin_addr.s_addr == active_users[i].client->sin_addr.s_addr  &&  client->sin_port == active_users[i].client->sin_port)
-            num_active--;
+    pthread_mutex_lock(&user_lock);
+        int available_users = num_active;
+        for (int i = 0, j = 0; i < available_users; i++) {
 
-        else {
-            temp[j] = active_users[i];
-            j++;
+            if (client->sin_addr.s_addr == active_users[i].client->sin_addr.s_addr  &&  client->sin_port == active_users[i].client->sin_port)
+                num_active--;
+
+            else {
+                temp[j] = active_users[i];
+                j++;
+            }
         }
-    }
+        free(active_users);
+        active_users = temp;
+    pthread_mutex_unlock(&user_lock);
 
-    free(active_users);
-    active_users = temp;
-
+/*
     printf("%d remaining users:\n", num_active);
     for (int i = 0; i < num_active; i++) {
         printf("%s\n", active_users[i].userID);
     }
+*/
 
-    if ( (sendto( socket, ACK, sizeof ACK, 0, (struct sockaddr* )client, (socklen_t) sizeof(*client) ))  < 0 ) {
+    if ( ( sendto(socket, ACK, sizeof ACK, 0, (struct sockaddr* )client, (socklen_t) sizeof *client) ) < 0 ) {
         perror("sendto() failed");
     }
 
@@ -289,6 +290,15 @@ void send_msg(int socket, struct sockaddr_in* client, char* buffer) {
     // figure out who is sending the message
     char sender[21];
     int sender_len = determine_sender(client, sender);
+
+    // if sender is unknown, they must LOGIN first
+    if (sender_len == 0) {
+        if ( (sendto( socket, ELOGINFIRST, sizeof ELOGINFIRST, 0, (struct sockaddr* )client, (socklen_t) sizeof(*client) ))  < 0 ) {
+            perror("sendto() failed");
+        }
+
+        return;
+    }
 
 
     int i = 5;
@@ -359,7 +369,6 @@ void send_msg(int socket, struct sockaddr_in* client, char* buffer) {
         }
     }
 
-
     free(client_msg);
     free(full_client_msg);
 }
@@ -372,6 +381,15 @@ void broadcast(int socket, struct sockaddr_in* client, char* buffer) {
     // figure out who is sending the message
     char sender[21];
     int sender_len = determine_sender(client, sender);
+
+    // if sender is unknown, they must LOGIN first
+    if (sender_len == 0) {
+        if ( (sendto( socket, ELOGINFIRST, sizeof ELOGINFIRST, 0, (struct sockaddr* )client, (socklen_t) sizeof(*client) ))  < 0 ) {
+            perror("sendto() failed");
+        }
+
+        return;
+    }
 
     // extract the message from the sender command
     int error = 0;
