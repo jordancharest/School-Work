@@ -31,10 +31,11 @@ typedef struct user {
 user_t* active_users;
 extern unsigned int num_active;
 extern pthread_t master_thread;
+extern pthread_mutex_t user_lock;
 
 
 // FUNCTION PROTOTYPES ===========================================================================
-void login(int socket, struct sockaddr_in* client, char* buffer, char* conn_type);
+void login_attempt(int socket, struct sockaddr_in* client, char* buffer, char* conn_type);
 void who(int socket, struct sockaddr_in* client, char* buffer);
 void logout(int socket, struct sockaddr_in* client);
 void send_msg(int socket, struct sockaddr_in* client, char* buffer);

@@ -27,16 +27,21 @@ unsigned int num_active = 0;
 // DETERMINE SENDER ==============================================================================
 /*  Determine the sender of a request to see if they are logged in                              */
 int determine_sender(struct sockaddr_in* client, char* sender) {
-    for (int i = 0; i < num_active; i++) {
+    int sender_name_len = 0;
 
-        // sender found
-        if (client->sin_addr.s_addr == active_users[i].client->sin_addr.s_addr  &&  client->sin_port == active_users[i].client->sin_port) {
-            strcpy(sender, active_users[i].userID);
-            return active_users[i].name_len;
+    pthread_mutex_lock(&user_lock);
+        for (int i = 0; i < num_active; i++) {
+
+            // sender found
+            if (client->sin_addr.s_addr == active_users[i].client->sin_addr.s_addr  &&  client->sin_port == active_users[i].client->sin_port) {
+                strcpy(sender, active_users[i].userID);
+                sender_name_len = active_users[i].name_len;
+                break;
+            }
         }
-    }
+    pthread_mutex_unlock(&user_lock);
 
-    return 0;   // sender not found, must LOGIN first
+    return sender_name_len;   // 0 if no sender is found (must login first)
 }
 
 // EXTRACT MESSAGE ===============================================================================
@@ -79,8 +84,90 @@ char* extract_message(char* command, char* buffer, int buf_index, int* error, in
 }
 
 
+// LOGIN VALID USERNAME ==========================================================================
+/* A login attempt was made with a valid username (still might be blocked if a TCP client
+    already has the username)                                                                   */
+void login_valid_username(int socket, struct sockaddr_in* client, char* username, char* msg, int* msg_len, int name_length, char* conn_type) {
+    int already_have_username = 0;
+    char sender[21];
+    int already_logged_in = determine_sender(client, sender);
+
+    // if the sender is asking to log in with the same user name, let them know (a different username is valid)
+    if (strcmp(sender, username) == 0)
+        already_have_username = 1;
+
+    int user_already_exists = 0;
+    int logout_needed = 0;
+    struct sockaddr_in* logout_client;
+    int* logout_socket = malloc(sizeof *logout_socket);
+
+    // ensure that the username is not taken
+    fprintf(stderr, "Taking lock\n");
+    pthread_mutex_lock(&user_lock);
+    fprintf(stderr, "Successfully took lock\n");
+        for (int j = 0; j < num_active; j++) {
+
+            int same_user = strcmp(active_users[j].userID, username);
+
+            // UDP users get preempted, TCP users maintain their connection
+            if ((same_user == 0  &&  strcmp(active_users[j].conn_type, "TCP") == 0)  ||  already_have_username) {
+                strcpy(msg, EUSRCONN);
+                *msg_len = sizeof EUSRCONN;
+                printf(EUSRCONN);
+                user_already_exists = 1;
+                break;
+
+            // UDP: log the previous user out
+            } else if (same_user == 0) {
+                logout_client = active_users[j].client;
+                *logout_socket = active_users[j].socket;
+                logout_needed = 1;
+            }
+        }
+    pthread_mutex_unlock(&user_lock);
+    fprintf(stderr, "Released lock\n");
+
+    // logout procedure moved outside of mutex to reduce lock time needed
+    if (logout_needed) {
+        printf("Logout needed\n");
+        logout(*logout_socket, logout_client);
+        printf("Logout completed\n");
+    }
+    free(logout_socket);
+
+
+    // if this IP address and port already has a different username, log the previous username out
+    if (already_logged_in  &&  !user_already_exists  &&  strcmp(sender, username) != 0){
+        printf("This IP is already logged in, logging out first...\n");
+        logout(socket, client);
+    }
+
+    // if the username isn't taken, create the user profile and add it to the active users
+    if (!user_already_exists) {
+        user_t new_user;
+        strncpy(new_user.userID, username, name_length+1);
+
+        new_user.active = 1;
+        new_user.client = client;
+        new_user.socket = socket;
+        new_user.name_len = name_length;
+        strcpy(new_user.conn_type, conn_type);
+
+        strcpy(msg, ACK);
+        *msg_len = sizeof ACK;
+        printf("%s has logged in\n", new_user.userID);
+
+        // edit the active user list
+        pthread_mutex_lock(&user_lock);
+            active_users[num_active] = new_user;
+            num_active++;
+        pthread_mutex_unlock(&user_lock);
+    }
+}
+
 // LOGIN =========================================================================================
-void login(int socket, struct sockaddr_in* client, char* buffer, char* conn_type) {
+/*  A login attempt was made (may be invalid)                                                   */
+void login_attempt(int socket, struct sockaddr_in* client, char* buffer, char* conn_type) {
 
     int i = 6;
     int msg_len;
@@ -120,60 +207,7 @@ void login(int socket, struct sockaddr_in* client, char* buffer, char* conn_type
 
     // username is valid
     } else {
-        int already_have_username = 0;
-        char sender[21];
-        int already_logged_in = determine_sender(client, sender);
-
-        // if the sender is asking to log in with the same user name, let them know (a different username is valid)
-        if (strcmp(sender, username) == 0)
-            already_have_username = 1;
-
-        // ensure that the username is not taken
-        int user_already_exists = 0;
-        for (int j = 0; j < num_active; j++) {
-
-            int same_user = strcmp(active_users[j].userID, username);
-
-            // UDP users get preempted, TCP users maintain their connection
-            if ((same_user == 0  &&  strcmp(active_users[j].conn_type, "TCP") == 0)  ||  already_have_username) {
-                strcpy(msg, EUSRCONN);
-                msg_len = sizeof EUSRCONN;
-                printf(EUSRCONN);
-                user_already_exists = 1;
-                break;
-
-            // UDP: log the previous user out
-            } else if (same_user == 0) {
-                printf("USP user is getting preempted\n");
-                logout(active_users[j].socket, active_users[j].client);
-            }
-        }
-
-        // if this IP address and port already has a different username, log the previous username out
-        if (already_logged_in  &&  !user_already_exists  &&  strcmp(sender, username) != 0){
-            printf("This IP is already logged in, logging out first...\n");
-            logout(socket, client);
-        }
-
-        // if the username isn't taken, create the user profile and add it to the active users
-        if (!user_already_exists) {
-            user_t new_user;
-            strncpy(new_user.userID, username, length+1);
-
-            new_user.active = 1;
-            new_user.client = client;
-            new_user.socket = socket;
-            new_user.name_len = length;
-            strcpy(new_user.conn_type, conn_type);
-
-            strcpy(msg, ACK);
-            msg_len = sizeof ACK;
-            printf("%s has logged in\n", new_user.userID);
-
-            active_users[num_active] = new_user;
-            num_active++;
-        }
-
+        login_valid_username(socket, client, username, msg, &msg_len, length, conn_type);
     }
 
     printf("Sending: %s, %d bytes, to client on port %d\n", msg, msg_len, ntohs(client->sin_port));
@@ -221,15 +255,11 @@ void logout(int socket, struct sockaddr_in* client) {
     printf("Active users: %d\n", num_active);
     int available_users = num_active;
     for (int i = 0, j = 0; i < available_users; i++) {
-        printf("Probing %s\n", active_users[i].userID);
 
-        if (client->sin_addr.s_addr == active_users[i].client->sin_addr.s_addr  &&  client->sin_port == active_users[i].client->sin_port) {
-            printf("User %d : %s matches the user requesting logout %d\n",
-                       ntohs(active_users[i].client->sin_port), active_users[i].userID, ntohs(client->sin_port));
+        if (client->sin_addr.s_addr == active_users[i].client->sin_addr.s_addr  &&  client->sin_port == active_users[i].client->sin_port)
             num_active--;
 
-        } else {
-            printf("Keeping user: %s\n", active_users[i].userID);
+        else {
             temp[j] = active_users[i];
             j++;
         }
@@ -414,7 +444,7 @@ void parse_command(int socket, struct sockaddr_in* client, char* buffer, char* c
 
     // fulfill the command
     if (strcmp(command, "LOGIN") == 0) {
-        login(socket, client, buffer, conn_type);
+        login_attempt(socket, client, buffer, conn_type);
 
     } else if (strcmp(command, "WHO") == 0) {
         who(socket, client, buffer);

@@ -17,6 +17,7 @@ typedef struct thread_args {
 } TA_t;
 
 pthread_t master_thread;
+pthread_mutex_t user_lock = PTHREAD_MUTEX_INITIALIZER;
 
 
 // UDP INIT ======================================================================================
