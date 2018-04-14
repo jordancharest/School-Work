@@ -18,10 +18,13 @@
 #define EUSRALNUM "ERROR: userid must be alphanumeric\n"
 #define EUSRCONN "ERROR: Already connected\n"
 
-// SEND Errors
+// SEND errors
 #define EUSRUNKNWN "ERROR: Unknown userid\n"
 #define EINVMSGLEN "ERROR: Invalid msglen\n"
 #define ELOGINFIRST "ERROR: Must LOGIN first\n"
+
+// Command error
+#define EUNKNWNCMD "ERROR: unknown command. Valid commands are:\n LOGIN\n WHO\n LOGOUT\n SEND\n BROADCAST\n SHARE\n"
 
 unsigned int num_active = 0;
 
@@ -134,7 +137,7 @@ void login_valid_username(int socket, struct sockaddr_in* client, char* username
 
     // if this IP address and port already has a different username, log the previous username out
     if (already_logged_in  &&  !user_already_exists  &&  strcmp(sender, username) != 0){
-        printf("This IP is already logged in, logging out first...\n");
+        printf("This IP is already logged in, replacing username...\n");
         logout(socket, client);
     }
 
@@ -224,7 +227,7 @@ void who(int socket, struct sockaddr_in* client, char* buffer) {
 
     // build a string of signed in users
     strcpy(str, ACK);
-    int msg_len = sizeof ACK-1; // subtract to account for removing the null terminator with strcat
+    int msg_len = sizeof ACK-1; // subtract 1 to account for removing the null terminator with strcat
 
     // concatenate the active usernames to the string to send
     for (int i = 0; i < num_active; i++) {
@@ -251,6 +254,7 @@ void logout(int socket, struct sockaddr_in* client) {
     user_t* temp = calloc(MAX_CLIENTS, sizeof *temp);
     printf("Active users: %d\n", num_active);
 
+    // determine who is requesting logout
     pthread_mutex_lock(&user_lock);
         int available_users = num_active;
         for (int i = 0, j = 0; i < available_users; i++) {
@@ -273,10 +277,6 @@ void logout(int socket, struct sockaddr_in* client) {
         printf("%s\n", active_users[i].userID);
     }
 */
-
-    if ( ( sendto(socket, ACK, sizeof ACK, 0, (struct sockaddr* )client, (socklen_t) sizeof *client) ) < 0 ) {
-        perror("sendto() failed");
-    }
 
 }
 
@@ -470,6 +470,10 @@ void parse_command(int socket, struct sockaddr_in* client, char* buffer, char* c
     } else if (strcmp(command, "LOGOUT") == 0) {
         logout(socket, client);
 
+        // User logins may sometimes prompt a logout, so move acknowledgment outside logout function to prevent message duplicates
+        if ( ( sendto(socket, ACK, sizeof ACK, 0, (struct sockaddr* )client, (socklen_t) sizeof *client) ) < 0 )
+            perror("sendto() failed");
+
     } else if (strcmp(command, "SEND") == 0) {
         send_msg(socket, client, buffer);
 
@@ -480,7 +484,7 @@ void parse_command(int socket, struct sockaddr_in* client, char* buffer, char* c
         share(socket, client, buffer, conn_type);
 
     } else {
-        printf("ERROR: unknown command. Valid commands are:\n LOGIN\n WHO\n LOGOUT\n SEND\n BROADCAST\n SHARE\n");
+        printf(EUNKNWNCMD);
     }
 
 
