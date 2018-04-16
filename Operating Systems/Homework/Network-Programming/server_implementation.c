@@ -87,6 +87,19 @@ char* extract_message(char* command, char* buffer, int buf_index, int* error, in
     return client_msg;
 }
 
+// EXTRACT RECIPIENT =============================================================================
+/* Extract the recipient of a message from the command                                          */
+void extract_recipient(char* buffer, int buf_index, char* recipient, int* recipient_index) {
+    int length = 0;
+
+    while (!isspace(buffer[buf_index]) && length < 20) {
+        recipient[length] = buffer[i];
+        buf_index++;
+        length++;
+    }
+    recipient[length] = '\0';
+}
+
 
 // LOGIN VALID USERNAME ==========================================================================
 /* A login attempt was made with a valid username (still might be blocked if a TCP client
@@ -254,7 +267,7 @@ void logout(int socket, struct sockaddr_in* client) {
     user_t* temp = calloc(MAX_CLIENTS, sizeof *temp);
     printf("Active users: %d\n", num_active);
 
-    // determine who is requesting logout
+    // determine who is requesting logout, remove them from active users list
     pthread_mutex_lock(&user_lock);
         int available_users = num_active;
         for (int i = 0, j = 0; i < available_users; i++) {
@@ -301,8 +314,7 @@ void send_msg(int socket, struct sockaddr_in* client, char* buffer) {
     }
 
 
-    int i = 5;
-    int length = 0;
+    int buf_index = 5;
 
     int return_msg_len;
     char return_msg[64];
@@ -310,13 +322,7 @@ void send_msg(int socket, struct sockaddr_in* client, char* buffer) {
     char recipient[21];
     int recipient_index;
 
-    // extract the recipient username from the command
-    while (!isspace(buffer[i]) && length < 20) {
-        recipient[length] = buffer[i];
-        i++;
-        length++;
-    }
-    recipient[length] = '\0';
+    extract_recipient(buffer, buf_index, recipient, recipient_index);
 
     // search for the recipient in the list of active users
     int j = 0;
@@ -341,7 +347,7 @@ void send_msg(int socket, struct sockaddr_in* client, char* buffer) {
 
 
     // extract the message from the sender command
-    int buf_index = i+1;
+    buf_index++;
     char client_msg_len[4];
     int full_client_msg_len = 9 + sender_len;   // add 9 to account for spaces/newline/null byte and "FROM"
 
@@ -442,7 +448,41 @@ void broadcast(int socket, struct sockaddr_in* client, char* buffer) {
 void share(int socket, struct sockaddr_in* client, char* buffer, char* conn_type) {
     printf("User requested SHARE\n");
 
-    //int i = 6;
+    // SHARE is not supported over UDP
+    if (strcmp("TCP", conn_type) != 0) {
+        printf("SHARE not supported over UDP\n");
+    }
+
+    int buf_index = 6;
+
+    int return_msg_len;
+    char return_msg[64];
+
+    char recipient[21];
+    int recipient_index;
+
+    extract_recipient(buffer, buf_index, recipient, recipient_index);
+
+    // search for the recipient in the list of active users
+    int j = 0;
+    for (; j < num_active; j++) {
+        if (strcmp(active_users[j].userID, recipient) == 0) {
+
+            // SHARE is not supported over UDP
+            if (strcmp(active_users[j].conn_type, "TCP") != 0) {
+                printf("SHARE not supported because recipient is using UDP\n");
+                return;
+            }
+
+            return_msg_len = sizeof ACK;
+            strncpy(return_msg, ACK, return_msg_len);
+            recipient_index = j;
+            break;
+
+        } else {
+            fprintf(stderr, "%s != %s\n", active_users[j].userID, recipient);
+        }
+    }
 
 
 }
@@ -486,8 +526,6 @@ void parse_command(int socket, struct sockaddr_in* client, char* buffer, char* c
     } else {
         printf(EUNKNWNCMD);
     }
-
-
 
 }
 
