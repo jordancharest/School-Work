@@ -23,6 +23,9 @@
 #define EINVMSGLEN "ERROR: Invalid msglen\n"
 #define ELOGINFIRST "ERROR: Must LOGIN first\n"
 
+// SHARE errors
+#define ESHAREUDP "SHARE not supported because recipient is using UDP\n"
+
 // Command error
 #define EUNKNWNCMD "ERROR: unknown command. Valid commands are:\n LOGIN\n WHO\n LOGOUT\n SEND\n BROADCAST\n SHARE\n"
 
@@ -89,15 +92,54 @@ char* extract_message(char* command, char* buffer, int buf_index, int* error, in
 
 // EXTRACT RECIPIENT =============================================================================
 /* Extract the recipient of a message from the command                                          */
-void extract_recipient(char* buffer, int buf_index, char* recipient, int* recipient_index) {
+void extract_recipient(char* buffer, int* buf_index, char* recipient, int* recipient_index) {
     int length = 0;
 
-    while (!isspace(buffer[buf_index]) && length < 20) {
-        recipient[length] = buffer[i];
-        buf_index++;
+    while (!isspace(buffer[*buf_index]) && length < 20) {
+        recipient[length] = buffer[*buf_index];
+        (*buf_index)++;
         length++;
     }
     recipient[length] = '\0';
+}
+
+
+// FIND RECIPIENT ================================================================================
+/*  Searches the list of active users by username, returns the socket descriptor and sets the
+    sockaddr_in struct pointer to point to the client                                           */
+void find_recipient(char* command, char* recipient, struct sockaddr_in* recipient_client,
+                    int* recipient_socket, char* return_msg, int* return_msg_len, int* error) {
+
+    // search for the recipient in the list of active users
+    for (int j = 0; j < num_active; j++) {
+
+        // if a match is found
+        if (strcmp(active_users[j].userID, recipient) == 0) {
+
+            // SHARE is not supported over UDP
+            if (strcmp(command, "SHARE") == 0  &&  strcmp(active_users[j].conn_type, "TCP") != 0) {
+                *return_msg_len = sizeof ESHAREUDP;
+                strncpy(return_msg, ESHAREUDP, *return_msg_len);
+                *error = 1;
+                break;
+            }
+
+            // return the client's info
+            *return_msg_len = sizeof ACK;
+            strncpy(return_msg, ACK, *return_msg_len);
+            *recipient_socket = active_users[j].socket;
+            *recipient_client =  *(active_users[j].client);
+            return;
+        }
+    }
+
+
+    // if it isn't, tell the sender that the username is unknown
+    if (*error != 1) {
+        *return_msg_len = sizeof EUSRUNKNWN;
+        strncpy(return_msg, EUSRUNKNWN, *return_msg_len);
+        *error = 1;
+    }
 }
 
 
@@ -315,35 +357,19 @@ void send_msg(int socket, struct sockaddr_in* client, char* buffer) {
 
 
     int buf_index = 5;
-
     int return_msg_len;
     char return_msg[64];
 
     char recipient[21];
     int recipient_index;
 
-    extract_recipient(buffer, buf_index, recipient, recipient_index);
+    // extract the name of the recipient from the command
+    extract_recipient(buffer, &buf_index, recipient, &recipient_index);
 
-    // search for the recipient in the list of active users
-    int j = 0;
-    for (; j < num_active; j++) {
-        if (strcmp(active_users[j].userID, recipient) == 0) {
-            return_msg_len = sizeof ACK;
-            strncpy(return_msg, ACK, return_msg_len);
-            recipient_index = j;
-            break;
-        } else {
-            fprintf(stderr, "%s != %s\n", active_users[j].userID, recipient);
-        }
-    }
-
-
-    // if it isn't, tell the sender that the username is unknown
-    if (j == num_active) {
-        return_msg_len = sizeof EUSRUNKNWN;
-        strncpy(return_msg, EUSRUNKNWN, return_msg_len);
-        error = 1;
-    }
+    // find the recipient in the list of active users
+    int recipient_socket;
+    struct sockaddr_in* recipient_client = malloc(sizeof *recipient_client);
+    find_recipient("SEND", recipient, recipient_client, &recipient_socket, return_msg, &return_msg_len, &error);
 
 
     // extract the message from the sender command
@@ -370,13 +396,14 @@ void send_msg(int socket, struct sockaddr_in* client, char* buffer) {
 
     // send the client message to the recipient
     if (!error) {
-        if ( (sendto( active_users[recipient_index].socket, full_client_msg, full_client_msg_len, 0, (struct sockaddr* )active_users[recipient_index].client, (socklen_t) sizeof(*(active_users[recipient_index].client)) ))  < 0 ) {
+        if ( (sendto( recipient_socket, full_client_msg, full_client_msg_len, 0, (struct sockaddr* )recipient_client, (socklen_t) sizeof(*(active_users[recipient_index].client)) ))  < 0 ) {
             perror("sendto() failed");
         }
     }
 
     free(client_msg);
     free(full_client_msg);
+    free(recipient_client);
 }
 
 
@@ -447,6 +474,7 @@ void broadcast(int socket, struct sockaddr_in* client, char* buffer) {
 // SHARE =========================================================================================
 void share(int socket, struct sockaddr_in* client, char* buffer, char* conn_type) {
     printf("User requested SHARE\n");
+    int error = 0;
 
     // SHARE is not supported over UDP
     if (strcmp("TCP", conn_type) != 0) {
@@ -454,37 +482,20 @@ void share(int socket, struct sockaddr_in* client, char* buffer, char* conn_type
     }
 
     int buf_index = 6;
-
-    int return_msg_len;
-    char return_msg[64];
-
     char recipient[21];
     int recipient_index;
 
-    extract_recipient(buffer, buf_index, recipient, recipient_index);
+    // extract the recipient's name from the received command
+    extract_recipient(buffer, &buf_index, recipient, &recipient_index);
 
-    // search for the recipient in the list of active users
-    int j = 0;
-    for (; j < num_active; j++) {
-        if (strcmp(active_users[j].userID, recipient) == 0) {
+    // find recipient in the list of active users
+    int recipient_socket;
+    struct sockaddr_in* recipient_client = malloc(sizeof *recipient_client);
+    int return_msg_len;
+    char return_msg[64];
+    find_recipient("SHARE", recipient, recipient_client, &recipient_socket, return_msg, &return_msg_len, &error);
 
-            // SHARE is not supported over UDP
-            if (strcmp(active_users[j].conn_type, "TCP") != 0) {
-                printf("SHARE not supported because recipient is using UDP\n");
-                return;
-            }
-
-            return_msg_len = sizeof ACK;
-            strncpy(return_msg, ACK, return_msg_len);
-            recipient_index = j;
-            break;
-
-        } else {
-            fprintf(stderr, "%s != %s\n", active_users[j].userID, recipient);
-        }
-    }
-
-
+    free(recipient_client);
 }
 
 // PARSE COMMAND =================================================================================
