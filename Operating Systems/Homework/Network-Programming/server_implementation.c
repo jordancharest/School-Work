@@ -314,10 +314,11 @@ void logout(int socket, struct sockaddr_in* client) {
         int available_users = num_active;
         for (int i = 0, j = 0; i < available_users; i++) {
 
-            if (client->sin_addr.s_addr == active_users[i].client->sin_addr.s_addr  &&  client->sin_port == active_users[i].client->sin_port)
+            if (client->sin_addr.s_addr == active_users[i].client->sin_addr.s_addr  &&  client->sin_port == active_users[i].client->sin_port) {
                 num_active--;
+                free(active_users[i].client);
 
-            else {
+            } else {
                 temp[j] = active_users[i];
                 j++;
             }
@@ -479,6 +480,20 @@ void share(int socket, struct sockaddr_in* client, char* buffer, char* conn_type
     // SHARE is not supported over UDP
     if (strcmp("TCP", conn_type) != 0) {
         printf("SHARE not supported over UDP\n");
+        return;
+    }
+
+    // figure out who is sending the message
+    char sender[21];
+    int sender_len = determine_sender(client, sender);
+
+    // if sender is unknown, they must LOGIN first
+    if (sender_len == 0) {
+        if ( (sendto( socket, ELOGINFIRST, sizeof ELOGINFIRST, 0, (struct sockaddr* )client, (socklen_t) sizeof(*client) ))  < 0 ) {
+            perror("sendto() failed");
+        }
+
+        return;
     }
 
     int buf_index = 6;
@@ -495,7 +510,90 @@ void share(int socket, struct sockaddr_in* client, char* buffer, char* conn_type
     char return_msg[64];
     find_recipient("SHARE", recipient, recipient_client, &recipient_socket, return_msg, &return_msg_len, &error);
 
+    // don't need the client to send over TCP
     free(recipient_client);
+
+    // extract the file length
+    buf_index++;
+    int length = 0;
+    char client_msg_len[16];
+
+    while (!isspace(buffer[buf_index])  &&  isdigit(buffer[buf_index])) {
+        client_msg_len[length] = buffer[buf_index];
+        buf_index++;
+        length++;
+    }
+    client_msg_len[length] = '\0';
+    int remaining_bytes = atoi(client_msg_len);
+
+    // validate the message length (no max file length)
+    if (remaining_bytes < 1) {
+        return_msg_len = sizeof EINVMSGLEN;
+        strncpy(return_msg, EINVMSGLEN, return_msg_len);
+        error = 1;
+    }
+
+    // Let sender know if there was an error or acknowledge success
+    if (error) {
+        send(socket, return_msg, return_msg_len, 0);
+        return;
+    } else
+        send(socket, ACK, sizeof ACK, 0);
+
+
+    // let the recipient know someone shared a file with them
+    char recipient_msg[32];
+    int recipient_msg_len = 8 + sender_len + length;
+
+    strcpy(recipient_msg, "FROM ");
+    strcat(recipient_msg, sender);
+    strcat(recipient_msg, " ");
+    strcat(recipient_msg, client_msg_len);
+
+    recipient_msg[recipient_msg_len-1] = '\n';
+
+    if (send(recipient_socket, recipient_msg, recipient_msg_len, 0) != recipient_msg_len) {
+        perror("send() failed");
+        exit(EXIT_FAILURE);
+    }
+
+
+    // receive and send the file in 1024 byte chunks
+    char file_buffer[1024];     // received messages are not expected to be characters (i.e. readable text)
+    while (remaining_bytes > 0) {
+        printf("%d bytes remaining\n", remaining_bytes);
+
+        // recv bytes from sender
+        int n_recv = recv(socket, file_buffer, MAX_BUFFER, 0 );
+        if (n_recv < 0) {
+            perror("recv() failed");
+            exit(EXIT_FAILURE);
+
+        } else if (n_recv == 0) {
+            printf("Client closed connection\n");
+            break;
+
+        // send bytes to recipient
+        } else {
+
+            int n_sent = send(recipient_socket, file_buffer, n_recv, 0);
+            if (n_sent != n_recv) {
+                perror("send() failed");
+                exit(EXIT_FAILURE);
+            }
+
+            // Acknowledge the sender
+            int n = send(socket, ACK, sizeof ACK, 0);
+            if (n != sizeof ACK) {
+                perror("send() failed");
+                exit(EXIT_FAILURE);
+            }
+
+            remaining_bytes -= n_recv;
+        }
+    }
+
+    printf("SHARE is finished\n");
 }
 
 // PARSE COMMAND =================================================================================
@@ -537,6 +635,5 @@ void parse_command(int socket, struct sockaddr_in* client, char* buffer, char* c
     } else {
         printf(EUNKNWNCMD);
     }
-
 }
 
