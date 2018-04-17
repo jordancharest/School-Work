@@ -41,13 +41,6 @@ int UDP_Init(struct sockaddr_in* server, int port) {
         exit(EXIT_FAILURE);
     }
 
-    /*
-    int length = sizeof(*server);
-    if ( getsockname(sd, (struct sockaddr *)server, (socklen_t *)&length) < 0 ) {
-        perror("getsockname() failed");
-        exit(EXIT_FAILURE);
-    }
-*/
     printf("MAIN: Listening for UDP datagrams on port: %d\n", ntohs(server->sin_port));
     fflush(stdout);
 
@@ -72,9 +65,6 @@ void handle_UDP_datagram(int UDP_socket, fd_set* read_fd_set) {
 
         parse_command(UDP_socket, client, buffer, "UDP");
     }
-
-    // clear the bit flag for this file descriptor
-    //FD_CLR(UDP_socket, read_fd_set);
 }
 
 
@@ -209,7 +199,7 @@ int main(int argc, char** argv) {
 
                 // connection established
                 else {
-                    printf("MAIN: Rcvd incoming TCP_connection from: %s\n", inet_ntoa(client->sin_addr));
+                    printf("MAIN: Rcvd incoming TCP connection from: %s\n", inet_ntoa(client->sin_addr));
                     fflush(stdout);
 
                     pthread_t tid;

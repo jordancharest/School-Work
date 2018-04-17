@@ -31,6 +31,17 @@
 
 unsigned int num_active = 0;
 
+// LOG EVENT =====================================================================================
+void log_event(char* out) {
+    if (master_thread == pthread_self())
+        printf("MAIN: ");
+    else
+        printf("CHILD %u: ", (unsigned int)pthread_self());
+
+    printf("%s", out);
+    fflush(stdout);
+}
+
 // DETERMINE SENDER ==============================================================================
 /*  Determine the sender of a request to see if they are logged in                              */
 int determine_sender(struct sockaddr_in* client, char* sender) {
@@ -121,6 +132,7 @@ void find_recipient(char* command, char* recipient, struct sockaddr_in* recipien
                 *return_msg_len = sizeof ESHAREUDP;
                 strncpy(return_msg, ESHAREUDP, *return_msg_len);
                 *error = 1;
+                log_event(strcat("Sent ", ESHAREUDP));
                 break;
             }
 
@@ -139,6 +151,7 @@ void find_recipient(char* command, char* recipient, struct sockaddr_in* recipien
         *return_msg_len = sizeof EUSRUNKNWN;
         strncpy(return_msg, EUSRUNKNWN, *return_msg_len);
         *error = 1;
+        log_event(strcat("Sent ", EUSRUNKNWN));
     }
 }
 
@@ -170,8 +183,9 @@ void login_valid_username(int socket, struct sockaddr_in* client, char* username
             if ((same_user == 0  &&  strcmp(active_users[j].conn_type, "TCP") == 0)  ||  already_have_username) {
                 strcpy(msg, EUSRCONN);
                 *msg_len = sizeof EUSRCONN;
-                printf(EUSRCONN);
                 user_already_exists = 1;
+
+                log_event(strcat("Sent ", EUSRCONN));
                 break;
 
             // UDP: log the previous user out
@@ -192,7 +206,6 @@ void login_valid_username(int socket, struct sockaddr_in* client, char* username
 
     // if this IP address and port already has a different username, log the previous username out
     if (already_logged_in  &&  !user_already_exists  &&  strcmp(sender, username) != 0){
-        printf("This IP is already logged in, replacing username...\n");
         logout(socket, client);
     }
 
@@ -209,7 +222,6 @@ void login_valid_username(int socket, struct sockaddr_in* client, char* username
 
         strcpy(msg, ACK);
         *msg_len = sizeof ACK;
-        printf("%s has logged in\n", new_user.userID);
 
         // edit the active user list
         pthread_mutex_lock(&user_lock);
@@ -238,26 +250,26 @@ void login_attempt(int socket, struct sockaddr_in* client, char* buffer, char* c
     username[length] = '\0';
 
 
-    if (pthread_self() == master_thread)
-        printf("MAIN: ");
-    else
-        printf("CHILD %u: ", (unsigned int)pthread_self());
-
-    printf("Rcvd LOGIN request for userid %s\n", username);
+    char request[64];
+    sprintf(request, "Rcvd LOGIN request for userid %s\n", username);
+    log_event(request);
 
 
     // validate the userid
     if (buffer[i] != '\n'  &&  !isalnum(buffer[i])) {
         strcpy(msg, EUSRALNUM);
         msg_len = sizeof EUSRALNUM;
+        log_event(strcat("Sent ", EUSRALNUM));
 
     } else if (length == 20) {
         strcpy(msg, EUSRLONG);
         msg_len = sizeof EUSRLONG;
+        log_event(strcat("Sent ", EUSRLONG));
 
     } else if (length < 3) {
         strcpy(msg, EUSRSHRT);
         msg_len = sizeof EUSRSHRT;
+        log_event(strcat("Sent ", EUSRSHRT));
 
     // username is valid
     } else {
@@ -268,15 +280,15 @@ void login_attempt(int socket, struct sockaddr_in* client, char* buffer, char* c
     if ( (sendto( socket, msg, msg_len, 0, (struct sockaddr* )client, (socklen_t) sizeof(*client) ))  < 0 ) {
         perror("sendto() failed");
     }
-
-    printf("There are now %d active users\n", num_active);
 }
 
 
 // WHO ===========================================================================================
 /*  Sends a list of active users to the requester (works even if requester is not logged in)    */
 void who(int socket, struct sockaddr_in* client, char* buffer) {
-    printf("%d requested WHO\n", ntohs(client->sin_port));
+
+    log_event("Rcvd WHO request\n");
+
 
     char* str = malloc(num_active*20);
 
@@ -286,7 +298,6 @@ void who(int socket, struct sockaddr_in* client, char* buffer) {
 
     // concatenate the active usernames to the string to send
     for (int i = 0; i < num_active; i++) {
-        printf("Appending %s to %s", active_users[i].userID, str);
         strcat(str, active_users[i].userID);
         strcat(str, "\n");
 
@@ -304,10 +315,11 @@ void who(int socket, struct sockaddr_in* client, char* buffer) {
 
 // LOGOUT ========================================================================================
 void logout(int socket, struct sockaddr_in* client) {
-    printf("%d requested LOGOUT\n", ntohs(client->sin_port));
+
+    log_event("Rcvd LOGOUT request\n");
+
 
     user_t* temp = calloc(MAX_CLIENTS, sizeof *temp);
-    printf("Active users: %d\n", num_active);
 
     // determine who is requesting logout, remove them from active users list
     pthread_mutex_lock(&user_lock);
@@ -326,20 +338,26 @@ void logout(int socket, struct sockaddr_in* client) {
         free(active_users);
         active_users = temp;
     pthread_mutex_unlock(&user_lock);
-
-/*
-    printf("%d remaining users:\n", num_active);
-    for (int i = 0; i < num_active; i++) {
-        printf("%s\n", active_users[i].userID);
-    }
-*/
-
 }
 
 
 // SEND MESSAGE ==================================================================================
 void send_msg(int socket, struct sockaddr_in* client, char* buffer) {
-    printf("User requested SEND\n");
+
+    int buf_index = 5;
+    int return_msg_len;
+    char return_msg[64];
+
+    char recipient[21];
+    int recipient_index;
+
+    // extract the name of the recipient from the command
+    extract_recipient(buffer, &buf_index, recipient, &recipient_index);
+
+    char request[64];
+    sprintf(request, "Rcvd SEND request to userid %s\n", recipient);
+    log_event(request);
+
 
     int error = 0;
 
@@ -356,16 +374,6 @@ void send_msg(int socket, struct sockaddr_in* client, char* buffer) {
         return;
     }
 
-
-    int buf_index = 5;
-    int return_msg_len;
-    char return_msg[64];
-
-    char recipient[21];
-    int recipient_index;
-
-    // extract the name of the recipient from the command
-    extract_recipient(buffer, &buf_index, recipient, &recipient_index);
 
     // find the recipient in the list of active users
     int recipient_socket;
@@ -410,7 +418,8 @@ void send_msg(int socket, struct sockaddr_in* client, char* buffer) {
 
 // BROADCAST =====================================================================================
 void broadcast(int socket, struct sockaddr_in* client, char* buffer) {
-    printf("User requested BROADCAST\n");
+
+    log_event("Rcvd BROADCAST request\n");
 
     // figure out who is sending the message
     char sender[21];
@@ -474,7 +483,10 @@ void broadcast(int socket, struct sockaddr_in* client, char* buffer) {
 
 // SHARE =========================================================================================
 void share(int socket, struct sockaddr_in* client, char* buffer, char* conn_type) {
-    printf("User requested SHARE\n");
+
+    log_event("Rcvd SHARE request\n");
+
+
     int error = 0;
 
     // SHARE is not supported over UDP
@@ -531,6 +543,7 @@ void share(int socket, struct sockaddr_in* client, char* buffer, char* conn_type
         return_msg_len = sizeof EINVMSGLEN;
         strncpy(return_msg, EINVMSGLEN, return_msg_len);
         error = 1;
+        log_event(strcat("Sent ", EINVMSGLEN));
     }
 
     // Let sender know if there was an error or acknowledge success
@@ -561,7 +574,6 @@ void share(int socket, struct sockaddr_in* client, char* buffer, char* conn_type
     // receive and send the file in 1024 byte chunks
     char file_buffer[1024];     // received messages are not expected to be characters (i.e. readable text)
     while (remaining_bytes > 0) {
-        printf("%d bytes remaining\n", remaining_bytes);
 
         // recv bytes from sender
         int n_recv = recv(socket, file_buffer, MAX_BUFFER, 0 );
@@ -570,7 +582,9 @@ void share(int socket, struct sockaddr_in* client, char* buffer, char* conn_type
             exit(EXIT_FAILURE);
 
         } else if (n_recv == 0) {
-            printf("Client closed connection\n");
+            char log_msg[64];
+            sprintf(log_msg, "CHILD %u: Client disconnected\n", (unsigned int)pthread_self());
+            log_event(log_msg);
             break;
 
         // send bytes to recipient
@@ -592,9 +606,8 @@ void share(int socket, struct sockaddr_in* client, char* buffer, char* conn_type
             remaining_bytes -= n_recv;
         }
     }
-
-    printf("SHARE is finished\n");
 }
+
 
 // PARSE COMMAND =================================================================================
 void parse_command(int socket, struct sockaddr_in* client, char* buffer, char* conn_type) {
@@ -633,7 +646,7 @@ void parse_command(int socket, struct sockaddr_in* client, char* buffer, char* c
         share(socket, client, buffer, conn_type);
 
     } else {
-        printf(EUNKNWNCMD);
+        log_event(strcat("Sent ", EUNKNWNCMD));
     }
 }
 
