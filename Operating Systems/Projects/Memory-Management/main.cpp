@@ -20,8 +20,6 @@ void parse_input(std::ifstream &InputStream) {
     std::vector<int> run_times;
     std::string line;
 
-
-    int i = 0;
     char delimiter;
 
     while (std::getline(InputStream, line)) {
@@ -29,29 +27,25 @@ void parse_input(std::ifstream &InputStream) {
 
         std::stringstream ss(line);
 
-        i = 0;
-        while (ss >> pid) {
 
-            // commented line
-            if (pid == '#')
-                break;
+        ss >> pid >> mem_frames;
+        if (pid == '#') {
+            std::cout << "Commented line\n";
+            continue;
+        }
 
-            // first loop read the frames needed, after, it's just a loop of arr_time/run_time until newline
-            if (i == 0) {
-                ss >> mem_frames;
-                std::cout << mem_frames;
 
-            } else {
-                ss >> arr_time
-                   >> delimiter
-                   >> run_time;
+        std::cout << pid << " " << mem_frames;
 
-                std::cout << " " << arr_time << delimiter << run_time;
 
-                arrival_times.push_back(arr_time);
-                run_times.push_back(run_time);
+        while (ss >> arr_time) {
+            ss >> delimiter
+               >> run_time;
 
-            }
+            std::cout << " " << arr_time << delimiter << run_time;
+
+            arrival_times.push_back(arr_time);
+            run_times.push_back(run_time);
         }
 
         std::cout << "\n";
