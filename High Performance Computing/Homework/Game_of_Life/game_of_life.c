@@ -4,6 +4,7 @@
 /***************************************************************************/
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <math.h>
 #include <pthread.h>
@@ -16,10 +17,10 @@
 
 
 // Global ========================================================================================
-const unsigned int BOARD_SIZE = 256;
-const unsigned int TICKS = 12;
+const unsigned int BOARD_SIZE = 1024;
+const unsigned int TICKS = 128;
 const double THRESHOLD = 0.25;
-const int MAX_WORLD_SIZE = 256;
+const int MAX_WORLD_SIZE = 128;
 
 unsigned int rows_per_thread = 0;
 unsigned int rows_per_rank = 0;
@@ -65,7 +66,7 @@ int main(int argc, char **argv) {
 	// Initialize pthread barrier to block all threads in a process
 	pthread_barrier_init(&barrier, NULL, num_threads);
 
-#ifdef DEBUG
+#if 1
 	if (rank == 0) {
 		printf("Run parameters:\n");
 		printf(" Board Size: %d\n", BOARD_SIZE);
@@ -114,24 +115,24 @@ int main(int argc, char **argv) {
 	if (rank == 0)
 		start_time = MPI_Wtime();
 
-	// pool data to construct heatmap data
-	int** heatmap = pooling(sub_matrix);
+    // open and write to file
+    MPI_File fh;
+    MPI_Status write_status;
+    int offset = 0;
+    MPI_File_open( MPI_COMM_WORLD, "final_world_state.txt", MPI_MODE_WRONLY | MPI_MODE_CREATE, MPI_INFO_NULL, &fh );
+
+    for (int i = 1; i <= rows_per_rank; i++) {
+        offset = (rank * rows_per_rank * BOARD_SIZE) + ((i-1) * BOARD_SIZE);
+        MPI_File_write_at( fh, offset, sub_matrix[i], BOARD_SIZE, MPI_UINT8_T, &write_status);
+    }
 
 
-// TODO
-/*
-	// open and write to file
-	MPI_file fh;
-	MPI_status write_status;
-	int offset = 0;
-	MPI_File_open( MPI_COMM_WORLD, "heatmap.csv", MPI_MODE_WRONLY | MPI_MODE_CREATE, MPI_INFO_NULL, &fh );
-	MPI_File_write_at( fh, offset, heatmap_rows, offset, MPI_CHAR, &write_status);
-*/
+	if (rank == 0)
+		printf("Total I/O Time: %lf\n", (MPI_Wtime() - start_time));
 
 
 	// Cleanup
 	matrix_free(sub_matrix, rows_per_rank+2);
-	matrix_free(heatmap, rows_per_rank);
 
     MPI_Barrier( MPI_COMM_WORLD );
     MPI_Finalize();
@@ -243,56 +244,12 @@ void* simulation(void* args) {
 		pthread_barrier_wait(&barrier);
 
 		if (master_thread == pthread_self()) {
-			#if 0
-				printf("RANK %d: Sending top row to rank %d and bottom row to rank %d\n", rank, top_destination, bottom_destination);
-			#endif
-
-
 			MPI_Isend(sub_matrix[1], BOARD_SIZE, MPI_INT, top_destination, 200, MPI_COMM_WORLD, &send_request);
 			MPI_Isend(sub_matrix[rows_per_rank], BOARD_SIZE, MPI_INT, bottom_destination, 100, MPI_COMM_WORLD, &send_request);
-
-
-			#if 0
-				if (master_thread == pthread_self()) {
-					for (int i = 0; i < world_size; i++) {
-						MPI_Barrier(MPI_COMM_WORLD);
-
-						if (rank == i) {
-							printf("\nRANK %d: Sending\n", rank);
-							for (int j = 0; j < BOARD_SIZE; j++)
-								printf("%d", sub_matrix[1][j]);
-
-							printf("\n");
-
-							for (int j = 0; j < BOARD_SIZE; j++)
-								printf("%d", sub_matrix[rows_per_rank][j]);
-						}
-					}
-				}
-			#endif
 
 			// wait to receive both top and bottom ghost rows
 			MPI_Wait(&top_request, MPI_STATUS_IGNORE);
 			MPI_Wait(&bottom_request, MPI_STATUS_IGNORE);
-
-			#if 0
-				if (master_thread == pthread_self()) {
-					for (int i = 0; i < world_size; i++) {
-						MPI_Barrier(MPI_COMM_WORLD);
-
-						if (rank == i) {
-							printf("\nRANK %d: Received\n", rank);
-							for (int j = 0; j < BOARD_SIZE; j++)
-								printf("%d", top_row[j]);
-
-							printf("\n");
-
-							for (int j = 0; j < BOARD_SIZE; j++)
-								printf("%d", bottom_row[j]);
-						}
-					}
-				}
-			#endif
 
 			add_ghost_data(sub_matrix, top_row, bottom_row);
 
@@ -304,7 +261,7 @@ void* simulation(void* args) {
 		// no thread can attempt to count neighbors until the master thread has incorporated the ghost data
 
 
-
+        // count how many neighbors each cell has
 		for (int row = thread_rank*rows_per_thread+1;  row < (thread_rank*rows_per_thread + rows_per_thread + 1);  row++)
 			for (int col = 0; col < BOARD_SIZE; col++)
 				neighbors[row][col] = count_neighbors(sub_matrix, row, col);
@@ -313,19 +270,6 @@ void* simulation(void* args) {
 		pthread_barrier_wait(&barrier);
 		new_generation(sub_matrix, thread_rank, neighbors);
 
-
-		#if 0
-			if (master_thread == pthread_self()) {
-				for (int i = 0; i < world_size; i++) {
-					MPI_Barrier(MPI_COMM_WORLD);
-
-					if (rank == i) {
-						printf("\nRANK %d:\n", rank);
-						print_board(sub_matrix, rows_per_rank+2, BOARD_SIZE);
-					}
-				}
-			}
-		#endif
 	} // end simulation
 
 	if (pthread_self() != master_thread) {
@@ -334,16 +278,12 @@ void* simulation(void* args) {
 		return EXIT_SUCCESS;
 	}
 
-
+    matrix_free(neighbors, rows_per_rank+2);
 	return 0;
 }
 
 // NEW GENERATION ================================================================================
 void new_generation(int** sub_matrix, int thread_rank, int** neighbors) {
-
-	#if 0
-		printf("\nRANK %d, THREAD %d: processing rows %d - %d\n", rank, thread_rank, (thread_rank*rows_per_thread+1), (thread_rank*rows_per_thread + rows_per_thread));
-	#endif
 
 	for (int row = thread_rank*rows_per_thread+1;  row < (thread_rank*rows_per_thread + rows_per_thread + 1);  row++) {
 		for (int col = 0; col < BOARD_SIZE; col++) {
@@ -360,17 +300,16 @@ void new_generation(int** sub_matrix, int thread_rank, int** neighbors) {
 			} else {
 
 				// alive cells with fewer than 2 neighbors will die
-				if (sub_matrix[row][col]  &&  neighbors[row][col] < 2) {
+				if (sub_matrix[row][col]  &&  neighbors[row][col] < 2)
 					sub_matrix[row][col] = DEAD;
 
 				// alive cells with more than 3 neighbors will die
-				} else if (sub_matrix[row][col]  &&  neighbors[row][col] > 3) {
+				else if (sub_matrix[row][col]  &&  neighbors[row][col] > 3)
 					sub_matrix[row][col] = DEAD;
 
 				// dead cells with exactly 3 neighbors will be born
-				} else if (!sub_matrix[row][col]  &&  neighbors[row][col] == 3) {
+				else if (!sub_matrix[row][col]  &&  neighbors[row][col] == 3)
 					sub_matrix[row][col] = ALIVE;
-				}
 			}
 		}
 	}
@@ -397,36 +336,6 @@ inline int count_neighbors(int** sub_matrix, int row, int col) {
 	return total;
 }
 
-// POOLING =======================================================================================
-/*	Pool sub matrix elements together by summing 16 x 16 grids into one element					*/
-int** pooling(int** sub_matrix) {
-
-	int rf = 16;	// reduction factor
-	const int POOL_SIZE = BOARD_SIZE/rf;
-	int** pooled_data = matrix_alloc(rows_per_rank/rf, POOL_SIZE);
-
-	int pooled_sum = 0;
-
-	for (int i = 0; i < rows_per_rank/rf; i++) {
-		for ( int j = 0; j < POOL_SIZE; j++) {
-			pooled_sum = 0;
-
-			for (int m = i*rf; m < i*rf + rf; m++) {
-				for (int n = j*rf; n < j*rf + rf; n++) {
-					pooled_sum += sub_matrix[m][n];
-				}
-			}
-
-			pooled_data[i][j] = pooled_sum;
-		}
-	}
-
-	return pooled_data;
-}
-
-
-
-
 
 // ADD GHOST DATA ================================================================================
 void add_ghost_data(int** sub_matrix, int* top, int* bottom) {
@@ -435,8 +344,6 @@ void add_ghost_data(int** sub_matrix, int* top, int* bottom) {
 		sub_matrix[rows_per_rank+1][i] = bottom[i];
 	}
 }
-
-
 
 
 // MATRIX ALLOCATION =============================================================================
