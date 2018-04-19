@@ -10,7 +10,7 @@
 
 
 // PARSE INPUT ===================================================================================
-void parse_input(std::ifstream &InputStream) {
+void parse_input(std::ifstream &InputStream, std::vector<Process> processes) {
 
     char pid;
     int mem_frames;
@@ -23,6 +23,9 @@ void parse_input(std::ifstream &InputStream) {
 
     // pull a whole line from the input file
     while (std::getline(InputStream, line)) {
+
+        arrival_times.clear();
+        run_times.clear();
 
         // Ignore commented lines
         if (line[0] == '#') {
@@ -42,7 +45,20 @@ void parse_input(std::ifstream &InputStream) {
             arrival_times.push_back(arr_time);
             run_times.push_back(run_time);
         }
+
+        processes.push_back(Process(pid, mem_frames, arrival_times.size(), arrival_times, run_times));
     }
+
+    #ifdef DEBUG
+    for (auto &proc : processes) {
+        std::cerr << proc.getPID() << " " << proc.getNumFrames();
+
+        for (size_t i = 0; i < proc.getNumBursts(); i++) {
+            std::cerr << " " << proc.getArrTime(i) << "/" << proc.getRunTime(i);
+        }
+        std::cerr << std::endl;
+    }
+    #endif // DEBUG
 }
 
 
@@ -61,7 +77,8 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
-    parse_input(InputStream);
+    std::vector<Process> processes;
+    parse_input(InputStream, processes);
 
 
 
