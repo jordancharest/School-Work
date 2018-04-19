@@ -7,10 +7,35 @@
 
 #include "process.hpp"
 
+// DISPLAY MEM POOL ==============================================================================
+void display_mem_pool(std::vector<char> &mem_pool) {
+    int rows = 8;
+    int elements_per_row = MEM_POOL_SIZE / rows;
 
+    // display delineator
+    for (int i = 0; i < elements_per_row; i++)
+        std::cout << '=';
+
+    // display memory pool
+    int i = 0;
+    for (auto &pid : mem_pool) {
+        if (i % elements_per_row == 0)
+            std::cout << '\n';
+
+        std::cout << pid;
+        i++;
+    }
+    std::cout << '\n';
+
+    // display delineator
+    for (int i = 0; i < elements_per_row; i++)
+        std::cout << '=';
+
+    std::cout << std::endl;
+}
 
 // PARSE INPUT ===================================================================================
-void parse_input(std::ifstream &InputStream, std::vector<Process> processes) {
+void parse_input(std::ifstream &InputStream, std::vector<Process> &processes) {
 
     char pid;
     int mem_frames;
@@ -50,14 +75,17 @@ void parse_input(std::ifstream &InputStream, std::vector<Process> processes) {
     }
 
     #ifdef DEBUG
-    for (auto &proc : processes) {
-        std::cerr << proc.getPID() << " " << proc.getNumFrames();
+        std::cerr << "Read from input file:\n";
 
-        for (size_t i = 0; i < proc.getNumBursts(); i++) {
-            std::cerr << " " << proc.getArrTime(i) << "/" << proc.getRunTime(i);
+        for (auto &proc : processes) {
+            std::cerr << proc.getPID() << " " << proc.getNumFrames();
+
+            for (size_t i = 0; i < proc.getNumBursts(); i++) {
+                std::cerr << " " << proc.getArrTime(i) << "/" << proc.getRunTime(i);
+            }
+            std::cerr << std::endl;
         }
-        std::cerr << std::endl;
-    }
+        std::cerr << "\n\n";
     #endif // DEBUG
 }
 
@@ -80,6 +108,7 @@ int main(int argc, char** argv) {
     std::vector<Process> processes;
     parse_input(InputStream, processes);
 
+    contiguous_memory_allocation(processes);
 
 
 

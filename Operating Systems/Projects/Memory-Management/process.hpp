@@ -3,9 +3,11 @@
 
 #include <vector>
 
+// Global ----------------------------------------------------------------------------------------
+const int MEM_POOL_SIZE = 256;
 
 
-
+// PROCESS CLASS =================================================================================
 class Process {
 public:
     // Constructor
@@ -17,8 +19,10 @@ public:
     const char getPID() const { return pid; }
     const unsigned int getNumFrames() const { return frames; }
     const unsigned int getNumBursts() const { return bursts; }
-    const int getArrTime(unsigned int index) const { return arrival_times.at(index); }
-    const int getRunTime(unsigned int index) const { return run_times.at(index); }
+    const unsigned int getCurrentBurst() const { return current_burst; }
+    const int getArrTime(size_t index) const { return arrival_times.at(index); }
+    const int getRunTime(size_t index) const { return run_times.at(index); }
+
 
 private:
     char pid;
@@ -26,10 +30,16 @@ private:
     unsigned int bursts;
     std::vector<int> arrival_times;
     std::vector<int> run_times;
-    int current_burst = 0;
+    unsigned int current_burst = 0;
 
 
 };
+
+
+
+// Function Prototype ----------------------------------------------------------------------------
+void display_mem_pool(std::vector<char> &mem_pool);
+void contiguous_memory_allocation(std::vector<Process> &processes);
 
 
 
