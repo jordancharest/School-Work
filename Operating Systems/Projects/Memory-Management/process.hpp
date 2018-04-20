@@ -28,7 +28,7 @@ public:
     const bool finished() const { return current_burst == bursts; }
 
     // Modifiers
-    void setStartingFrame(int frame) { starting_frame = frame; }
+    void updateStartFrame(int frame) { starting_frame = frame; }
     void skipped() { current_burst++; }
     void removed() { current_burst++; }
 

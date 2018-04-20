@@ -19,8 +19,27 @@ bool pid_sort(Process &a, Process &b) {
     the changes made during defragmentation                                                     */
 void defrag_update(std::vector<char> &mem_pool, std::vector<Process> &processes) {
 
+    char prev_frame = '.';
+    for (int i = 0; i < MEM_POOL_SIZE; i++) {
+
+        // a new process start was detected
+        if (mem_pool[i] != prev_frame) {
+            for (auto &proc : processes) {
+
+                // update the start frame of that process
+                if (proc.getPID() == mem_pool[i]) {
+                    proc.updateStartFrame(i);
+                }
+            }
+        }
+
+        prev_frame = mem_pool[i];
+    }
+
+
 }
 // DEFRAGMENTATION ===============================================================================
+/* Push all processes to the top of memory to make room at the bottom                           */
 void defragmentation(std::vector<char> &mem_pool, Process &proc, int &t, int &start_frame) {
     char pid = proc.getPID();
     std::cout << "time " << t << "ms: Cannot place process " << pid << " -- starting defragmentation\n";
