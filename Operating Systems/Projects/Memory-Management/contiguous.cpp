@@ -5,15 +5,25 @@
 
 #include "process.hpp"
 
+int defrag_time = 0;
+
+
 // PID SORT ======================================================================================
 bool pid_sort(Process &a, Process &b) {
     return a.getPID() < b.getPID();
 }
 
+
+// DEFRAG UPDATE =================================================================================
+/* Update the process parameters (end times, start frames, etc.) to account for
+    the changes made during defragmentation                                                     */
+void defrag_update(std::vector<char> &mem_pool, std::vector<Process> &processes) {
+
+}
 // DEFRAGMENTATION ===============================================================================
-void defragmentation(std::vector<char> &mem_pool, Process &proc, int* t, int* start_frame) {
+void defragmentation(std::vector<char> &mem_pool, Process &proc, int &t, int &start_frame) {
     char pid = proc.getPID();
-    std::cout << "time " << *t << "ms: Cannot place process " << pid << " -- starting defragmentation\n";
+    std::cout << "time " << t << "ms: Cannot place process " << pid << " -- starting defragmentation\n";
 
     int total_frames = 0;
     //int total_processes = 0;
@@ -63,19 +73,20 @@ void defragmentation(std::vector<char> &mem_pool, Process &proc, int* t, int* st
             i++;
     }
 
-    *start_frame = i;
+    start_frame = i;
 
-    std::cout << "Placing process " << pid << " from frame " << i << " to " << *start_frame + proc.getNumFrames() << "\n";
+    std::cout << "Placing process " << pid << " from frame " << i << " to " << start_frame + proc.getNumFrames() << "\n";
 
     // place the new process in memory
-    for (; i < *start_frame + proc.getNumFrames(); i++)
+    for (; i < start_frame + proc.getNumFrames(); i++)
         mem_pool[i] = pid;
 
     // update the global clock
-    *t += (total_frames * T_MEMMOVE);
-    std::cout << "time " << *t << "ms: Defragmentation complete (moved " << total_frames << " frames\n";
+    t += (total_frames * T_MEMMOVE);
+    defrag_time += (total_frames * T_MEMMOVE);
+    std::cout << "time " << t << "ms: Defragmentation complete (moved " << total_frames << " frames\n";
 
-    std::cout << "time " << *t << "ms: Placed process " << pid << ":\n";
+    std::cout << "time " << t << "ms: Placed process " << pid << ":\n";
     display_mem_pool(mem_pool);
 }
 
@@ -156,13 +167,13 @@ void process_removal(std::vector<char> &mem_pool, Process &proc, int t) {
 
 
 // NEXT FIT ======================================================================================
-bool next_fit(std::vector<char> &mem_pool, Process &proc, int* t, int* start_frame) {
+bool next_fit(std::vector<char> &mem_pool, std::vector<Process> &processes, Process &proc, int &t, int &start_frame) {
 
     static int current_frame = 0;
     int frames_needed = proc.getNumFrames();
     char pid = proc.getPID();
 
-    std::cout << "time " << *t << "ms: Process " << pid << " arrived (requires " << frames_needed;
+    std::cout << "time " << t << "ms: Process " << pid << " arrived (requires " << frames_needed;
     if (frames_needed > 1)  std::cout << " frames)\n";
     else                    std::cout << " frame)\n";
 
@@ -182,7 +193,7 @@ bool next_fit(std::vector<char> &mem_pool, Process &proc, int* t, int* start_fra
            // if we find a block large enough, place the process in that block
             if (free_counter == frames_needed) {
                 int j = i + 1 - free_counter;
-                *start_frame = j;
+                start_frame = j;
 
                 // fill in from the starting point to the current position
                 for (; j <= i; j++)
@@ -211,7 +222,7 @@ bool next_fit(std::vector<char> &mem_pool, Process &proc, int* t, int* start_fra
                 // if we find a block large enough, place the process in that block
                 if (free_counter == frames_needed) {
                     int j = i + 1 - free_counter;
-                    *start_frame = j;
+                    start_frame = j;
 
                     // fill in from the starting point to the current position
                     for (; j <= i; j++)
@@ -230,50 +241,52 @@ bool next_fit(std::vector<char> &mem_pool, Process &proc, int* t, int* start_fra
     if (!placed) {
         if (total >= frames_needed) {
             defragmentation(mem_pool, proc, t, start_frame);
+            defrag_update(mem_pool, processes);
             return true;
 
        } else {
-            std::cout << "time " << *t << "ms: Cannot place process " << pid << " -- skipped!\n";
+            std::cout << "time " << t << "ms: Cannot place process " << pid << " -- skipped!\n";
             return false;
        }
     }
 
-    std::cout << "time " << *t << "ms: Placed process " << pid << "\n";
+    std::cout << "time " << t << "ms: Placed process " << pid << "\n";
     display_mem_pool(mem_pool);
     return true;
 }
 
 
 // BEST FIT ======================================================================================
-bool best_fit(std::vector<char> &mem_pool, Process &proc, int* t, int* start_frame) {
+bool best_fit(std::vector<char> &mem_pool, std::vector<Process> &processes, Process &proc, int &t, int &start_frame) {
 
     char pid = proc.getPID();
     int frames_needed = proc.getNumFrames();
 
-    std::cout << "time " << *t << "ms: Process " << pid << " arrived (requires " << frames_needed;
+    std::cout << "time " << t << "ms: Process " << pid << " arrived (requires " << frames_needed;
     if (frames_needed > 1)  std::cout << " frames)\n";
     else                    std::cout << " frame)\n";
 
     // search the mem pool for <frames_needed> frames according to the best-fit paradigm
-    *start_frame = search_mem_pool(mem_pool, frames_needed, "best");
+    start_frame = search_mem_pool(mem_pool, frames_needed, "best");
 
     // search_mem_pool returns -1 if the mem_pool needs defragmentation
-    if (*start_frame == -1) {
+    if (start_frame == -1) {
         defragmentation(mem_pool, proc, t, start_frame);
+        defrag_update(mem_pool, processes);
         return true;
 
     // -2 if the process cannot be placed
-    } else if (*start_frame == -2) {
-        std::cout << "time " << *t << "ms: Cannot place process " << pid << " -- skipped!\n";
+    } else if (start_frame == -2) {
+        std::cout << "time " << t << "ms: Cannot place process " << pid << " -- skipped!\n";
         return false;
 
     // else it returns the frame to start at
     } else {
-        for (int i = *start_frame; i < *start_frame + frames_needed; i++) {
+        for (int i = start_frame; i < start_frame + frames_needed; i++) {
             mem_pool[i] = pid;
         }
 
-        std::cout << "time " << *t << "ms: Placed process " << pid << "\n";
+        std::cout << "time " << t << "ms: Placed process " << pid << "\n";
         display_mem_pool(mem_pool);
         return true;
     }
@@ -281,7 +294,7 @@ bool best_fit(std::vector<char> &mem_pool, Process &proc, int* t, int* start_fra
 
 
 // WORST FIT =====================================================================================
-bool worst_fit(std::vector<char> &mem_pool, Process &proc, int* t, int* start_frame) {
+bool worst_fit(std::vector<char> &mem_pool, std::vector<Process> &processes, Process &proc, int &t, int &start_frame) {
 
 
 
@@ -292,7 +305,7 @@ bool worst_fit(std::vector<char> &mem_pool, Process &proc, int* t, int* start_fr
 
 
 // SIMULATOR =====================================================================================
-void simulator(std::vector<Process> &processes, std::string algorithm) {
+void simulator(std::vector<Process> processes, std::string algorithm) {
 
     int t = 0;
     int remaining_processes = processes.size();
@@ -310,7 +323,7 @@ void simulator(std::vector<Process> &processes, std::string algorithm) {
         // check if any processes need to be removed (removal is the same for all algorithms)
         for (auto &proc : processes) {
 
-            if (!proc.finished()  &&  proc.getEndTime() == t) {
+            if (!proc.finished()  &&  proc.getEndTime() == (t - defrag_time)) {
                 process_removal(mem_pool, proc, t);
                 proc.removed();
 
@@ -325,18 +338,18 @@ void simulator(std::vector<Process> &processes, std::string algorithm) {
         for (auto &proc : processes) {
 
             // if a process is arriving at the current time
-            if (!proc.finished()  &&  proc.getArrTime( proc.getCurrentBurst() ) == t) {
+            if (!proc.finished()  &&  proc.getArrTime( proc.getCurrentBurst() ) == (t - defrag_time)) {
 
                 bool success;
                 int start_frame;
 
                 // attempt to place it; start_frame is guaranteed to be set if success == true
                 if (algorithm == "Next-Fit")
-                    success = next_fit(mem_pool, proc, &t, &start_frame);
+                    success = next_fit(mem_pool, processes, proc, t, start_frame);
                 else if (algorithm == "Best-Fit")
-                    success = best_fit(mem_pool, proc, &t, &start_frame);
+                    success = best_fit(mem_pool, processes, proc, t, start_frame);
                 else if (algorithm == "Worst-Fit")
-                    success = worst_fit(mem_pool, proc, &t, &start_frame);
+                    success = worst_fit(mem_pool, processes, proc, t, start_frame);
 
                 if (success) {
                     proc.placed(t, start_frame);
