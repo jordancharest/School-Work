@@ -80,7 +80,7 @@ void parse_input(std::ifstream &InputStream, std::vector<Process> &processes) {
         for (auto &proc : processes) {
             std::cerr << proc.getPID() << " " << proc.getNumFrames();
 
-            for (size_t i = 0; i < proc.getNumBursts(); i++) {
+            for (int i = 0; i < proc.getNumBursts(); i++) {
                 std::cerr << " " << proc.getArrTime(i) << "/" << proc.getRunTime(i);
             }
             std::cerr << std::endl;

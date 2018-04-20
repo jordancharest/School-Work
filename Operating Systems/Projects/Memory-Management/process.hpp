@@ -17,22 +17,31 @@ public:
 
     // Accessors
     const char getPID() const { return pid; }
-    const unsigned int getNumFrames() const { return frames; }
-    const unsigned int getNumBursts() const { return bursts; }
-    const unsigned int getCurrentBurst() const { return current_burst; }
+    const int getNumFrames() const { return frames; }
+    const int getNumBursts() const { return bursts; }
+    const int getCurrentBurst() const { return current_burst; }
+    const int getStartingFrame() const { return starting_frame; }
     const int getArrTime(size_t index) const { return arrival_times.at(index); }
     const int getRunTime(size_t index) const { return run_times.at(index); }
+    const int getEndTime() const { return end_time; }
+    const bool finished() const { return current_burst == bursts; }
+
+    // Modifiers
+    void setStartingFrame(int frame) { starting_frame = frame; }
+    void placed(int time) { end_time = time + run_times[current_burst]; }
+    void skipped() { current_burst++; }
+    void removed() { current_burst++; }
 
 
 private:
     char pid;
-    unsigned int frames;
-    unsigned int bursts;
+    int frames;
+    int bursts;
     std::vector<int> arrival_times;
     std::vector<int> run_times;
-    unsigned int current_burst = 0;
-
-
+    int current_burst = 0;
+    int starting_frame = 0;
+    int end_time = -1;
 };
 
 
