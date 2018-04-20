@@ -5,6 +5,7 @@
 
 // Global ----------------------------------------------------------------------------------------
 const int MEM_POOL_SIZE = 256;
+const int T_MEMMOVE = 1;
 
 
 // PROCESS CLASS =================================================================================
@@ -28,9 +29,13 @@ public:
 
     // Modifiers
     void setStartingFrame(int frame) { starting_frame = frame; }
-    void placed(int time) { end_time = time + run_times[current_burst]; }
     void skipped() { current_burst++; }
     void removed() { current_burst++; }
+
+    void placed(int time, int frame) {
+        end_time = time + run_times[current_burst];
+        starting_frame = frame;
+    }
 
 
 private:
