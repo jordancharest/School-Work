@@ -276,7 +276,8 @@ bool next_fit(std::vector<char> &mem_pool, std::vector<Process> &processes, Proc
 
 
 // BEST FIT ======================================================================================
-bool best_fit(std::vector<char> &mem_pool, std::vector<Process> &processes, Process &proc, int &t, int &start_frame) {
+bool best_or_worst_fit(std::string algorithm, std::vector<char> &mem_pool, std::vector<Process> &processes,
+                       Process &proc, int &t, int &start_frame) {
 
     char pid = proc.getPID();
     int frames_needed = proc.getNumFrames();
@@ -286,7 +287,7 @@ bool best_fit(std::vector<char> &mem_pool, std::vector<Process> &processes, Proc
     else                    std::cout << " frame)\n";
 
     // search the mem pool for <frames_needed> frames according to the best-fit paradigm
-    start_frame = search_mem_pool(mem_pool, frames_needed, "best");
+    start_frame = search_mem_pool(mem_pool, frames_needed, algorithm);
 
     // search_mem_pool returns -1 if the mem_pool needs defragmentation
     if (start_frame == -1) {
@@ -311,22 +312,11 @@ bool best_fit(std::vector<char> &mem_pool, std::vector<Process> &processes, Proc
     }
 }
 
-
-// WORST FIT =====================================================================================
-bool worst_fit(std::vector<char> &mem_pool, std::vector<Process> &processes, Process &proc, int &t, int &start_frame) {
-
-
-
-
-
-    return true;
-}
-
-
 // SIMULATOR =====================================================================================
 void simulator(std::vector<Process> processes, std::string algorithm) {
 
     int t = 0;
+    defrag_time = 0;
     int remaining_processes = processes.size();
 
     std::vector<char> mem_pool(MEM_POOL_SIZE, '.');
@@ -363,16 +353,19 @@ void simulator(std::vector<Process> processes, std::string algorithm) {
                 int start_frame;
 
                 // attempt to place it; start_frame is guaranteed to be set if success == true
+                // t may be changed if defragmentation occurred
                 if (algorithm == "Next-Fit")
                     success = next_fit(mem_pool, processes, proc, t, start_frame);
+
                 else if (algorithm == "Best-Fit")
-                    success = best_fit(mem_pool, processes, proc, t, start_frame);
+                    success = best_or_worst_fit("best", mem_pool, processes, proc, t, start_frame);
+
                 else if (algorithm == "Worst-Fit")
-                    success = worst_fit(mem_pool, processes, proc, t, start_frame);
+                    success = best_or_worst_fit("worst", mem_pool, processes, proc, t, start_frame);
+
 
                 if (success) {
                     proc.placed(t, start_frame);
-                    std::cout << "Process " << proc.getPID() << " will finish at " << proc.getEndTime() << "\n";
                 } else {
                     proc.skipped();
                     if (proc.finished())
@@ -386,13 +379,13 @@ void simulator(std::vector<Process> processes, std::string algorithm) {
 
 
         t++;
-        if (t > 3000) {
+        if (t > 10000) {
             std::cerr << "Preventing infinite loop\n";
             break;
         }
     }
 
-    std::cout << "time " << (t-1) << "ms: Simulator ended (Contiguous -- " << algorithm << ")\n";
+    std::cout << "time " << (t-1) << "ms: Simulator ended (Contiguous -- " << algorithm << ")\n\n";
 }
 
 
@@ -401,8 +394,8 @@ void simulator(std::vector<Process> processes, std::string algorithm) {
 // CONTIGUOUS MEMORY ALLOCATION ==================================================================
 void contiguous_memory_allocation(std::vector<Process> &processes) {
     simulator(processes, "Next-Fit");
-    //simulator(processes, "Best-Fit");
-    //simulator(processes, "Worst-Fit");
+    simulator(processes, "Best-Fit");
+    simulator(processes, "Worst-Fit");
 }
 
 
