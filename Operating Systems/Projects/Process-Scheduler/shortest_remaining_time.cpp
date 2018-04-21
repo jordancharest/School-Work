@@ -19,16 +19,24 @@ stat_t Shortest_Remaining_Time(std::vector<Process> &processes) {
     std::cout <<  "time 0ms: Simulator started for SRT " << queue_contents(ready_queue) << "\n";
 
     // Build the initial ready queue, processes are ordered by arrival time
-    int time = processes[0].getArrivalTime();
-    int next = 0;
-
-    // check for all processes that will arrive before the first process can start running
-    for (int i = 0; i < (T_CS/2); i++) {
-        while (next < total_processes && processes[next].getArrivalTime() == time + i ) {
-            process_arrival(ready_queue, processes[next], time+i);
-            next++;
-        }
-    }
+	std::list<Process> buffered_arrival;
+	int buffered_ct = 0;
+	int time = processes[0].getArrivalTime();
+	int next = 0;
+	// check for all processes that will arrive before the first process can start running
+	for (int i = 0; i < (T_CS / 2); i++) {
+		while (next < total_processes && processes[next].getArrivalTime() == time + i) {
+			buffered_arrival.push_back(processes[next]);
+			next++;
+			buffered_ct++;
+		}
+		buffered_arrival.sort(AB_sort);
+		for (int j = 0; j < buffered_ct; j++) {
+			process_arrival(ready_queue, buffered_arrival.front(), time + i);
+			buffered_arrival.pop_front();
+		}
+		buffered_ct = 0;
+	}
 
     // start the first process
     Process running = ready_queue.front();
@@ -124,8 +132,13 @@ stat_t Shortest_Remaining_Time(std::vector<Process> &processes) {
 
             // else just add it to the ready queue
             } else {
-                process_arrival(ready_queue, processes[next], time);
-                ready_queue.sort(SRT_sort);
+                //process_arrival(ready_queue, processes[next], time);
+				processes[next].setAsREADY(time);
+				processes[next].setWholeBurstReadyTime(time);
+				ready_queue.push_back(processes[next]);
+				ready_queue.sort(SRT_sort);
+				std::cout << "time " << time << "ms: Process " << processes[next].getPID()
+					<< " arrived and added to ready queue " << queue_contents(ready_queue) << "\n";
             }
 
             next++;
