@@ -15,6 +15,6 @@ void draw();
 int init();
 struct Node* link(struct Node* n);
 void generate_maze(int argc, char** argv);
-void serial_A_star(int width, int height);
+void serial_BFS(int width, int height);
 
 #endif // MAZE_H_INCLUDED

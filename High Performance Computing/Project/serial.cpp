@@ -1,12 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "maze.h"
+#include "maze.hpp"
 
 extern struct Node* nodes;  // maze; contained in one dimensional array
 
 // SERIAL ========================================================================================
-void serial_A_star(int width, int height) {
+void serial_BFS(int width, int height) {
 
     int x = 1;
     int y = 1;

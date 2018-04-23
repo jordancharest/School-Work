@@ -3,30 +3,20 @@
 #include <time.h>
 #include <string.h>
 
+#include "maze.hpp"
 
-typedef struct {
-	int x, y; // Node position - little waste of memory, but it allows faster generation
-	void *parent; // Pointer to parent node
-	char c; // Character to be displayed
-	char dirs; // Directions that still haven't been explored
-} Node;
 
-Node *nodes; // Nodes array (maze); note one dimensional
+
+
+struct Node* nodes; // Nodes array (maze); note one dimensional
 int width, height; // Maze dimensions
-
-// FUNCTION PROTOTYPES ===========================================================================
-void draw();
-int init();
-Node* link(Node* n);
-void generate_maze(int argc, char** argv);
-
 
 
 // MAIN ==========================================================================================
 int main(int argc, char** argv) {
 
     generate_maze(argc, argv);
-
+    serial_BFS(width, height);
 
 
 
@@ -36,7 +26,7 @@ int main(int argc, char** argv) {
 
 // GENERATE MAZE =================================================================================
 void generate_maze(int argc, char** argv) {
-	Node *start, *last;
+	struct Node *start, *last;
 
 	// Check argument count
 	if (argc < 3) {
@@ -85,10 +75,10 @@ void generate_maze(int argc, char** argv) {
 // INIT MAZE GENERATOR ===========================================================================
 int init() {
 	int i, j;
-	Node *n;
+	struct Node *n;
 
 	//Allocate memory for maze
-	nodes = calloc( width * height, sizeof(*nodes) );
+	nodes = (Node*) calloc( width * height, sizeof(*nodes) );
 	if (nodes == NULL) return 1;
 
 	//Setup crucial nodes
@@ -113,11 +103,11 @@ int init() {
 // LINK ==========================================================================================
 /* Connects node to random neighbor (if possible) and return address of next node that
     should be visited                                                                           */
-Node* link( Node *n ) {
+struct Node* link( struct Node *n ) {
 
 	int x, y;
 	char dir;
-	Node *dest;
+	struct Node *dest;
 
 	// Nothing can be done if null pointer is given - return
 	if (n == NULL) return NULL;
@@ -196,7 +186,7 @@ Node* link( Node *n ) {
 	}
 
 	// If nothing more can be done here - return parent's address
-	return n->parent;
+	return (Node*)n->parent;
 }
 
 
