@@ -17,10 +17,10 @@
 
 
 // Global ========================================================================================
-const unsigned int BOARD_SIZE = 1024;
+const unsigned int BOARD_SIZE = 16384;
 const unsigned int TICKS = 128;
 const double THRESHOLD = 0.25;
-const int MAX_WORLD_SIZE = 128;
+const int MAX_WORLD_SIZE = 256;
 
 unsigned int rows_per_thread = 0;
 unsigned int rows_per_rank = 0;
