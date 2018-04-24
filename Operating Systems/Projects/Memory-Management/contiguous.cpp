@@ -83,16 +83,19 @@ int defragmentation(std::vector<char> &mem_pool, Process &proc, int &t, int &sta
 
             // move the memory
             while (i < MEM_POOL_SIZE  &&  i < (start_move+free_counter-1)) {
+
+                // Don't move empty frames
+                if (mem_pool[i] == '.') break;
+
+                // move the memory
                 cache = mem_pool[i];   // cache the memory in that frame
                 mem_pool[i] = '.';      // erase the frame
                 mem_pool[i-free_counter] = cache;   // write the cached frame to the new location
+
                 i++;
+                total_frames++;
 
-                // sometimes we may be 'moving' empty frames; don't count them in the total frames moved
-                if (cache != '.')
-                    total_frames++;
-
-                // keep track of which process had their frames moved
+                // keep track of which processes had their frames moved
                 if (last_frame_moved != cache){
                     last_frame_moved = cache;
                     moved_frames.push_back(last_frame_moved);
@@ -113,9 +116,9 @@ int defragmentation(std::vector<char> &mem_pool, Process &proc, int &t, int &sta
     t += time_added;
     defrag_time += (total_frames * T_MEMMOVE);
     std::cout << "time " << t << "ms: Defragmentation complete (moved " << total_frames << " frames:";
-    for (size_t i = 0; i < moved_frames.size()-1; i++) {
+    for (size_t i = 0; i < moved_frames.size(); i++) {
         std::cout << " " << moved_frames[i];
-        if (i != moved_frames.size()-2) std::cout << ",";
+        if (i != moved_frames.size()-1) std::cout << ",";
     }
     std::cout << ")\n";
     display_mem_pool(mem_pool);
@@ -350,12 +353,6 @@ void simulator(std::vector<Process> processes, std::string algorithm) {
         // check if any processes need to be removed (removal is the same for all algorithms)
         for (auto &proc : processes) {
 
-            // debugging
-            /*if (t == 860 && proc.getPID() == 'D') {
-                std::cout << "Process D is finished: " << proc.finished() << "; End time is:  " << proc.getEndTime() << "\n";
-            }
-            */
-
             if (!proc.finished()  &&  proc.getEndTime() == t) {
                 process_removal(mem_pool, proc, t);
                 proc.removed();
@@ -390,8 +387,7 @@ void simulator(std::vector<Process> processes, std::string algorithm) {
 
                 if (success) {
                     proc.placed(t, start_frame);
-                    //std::cout << "Process " <<proc.getPID() << " has a run time of " << proc.getRunTime(proc.getCurrentBurst()) << "\n";
-                    //std::cout << "Process " <<proc.getPID() << " has an end time of " << proc.getEndTime() << "\n";
+
                 } else {
                     proc.skipped();
                     if (proc.finished())
@@ -405,10 +401,6 @@ void simulator(std::vector<Process> processes, std::string algorithm) {
 
 
         t++;
-        if (t > 10000) {
-            std::cerr << "Preventing infinite loop\n";
-            break;
-        }
     }
 
     std::cout << "time " << (t-1) << "ms: Simulator ended (Contiguous -- " << algorithm << ")\n";
@@ -425,7 +417,7 @@ void contiguous_memory_allocation(std::vector<Process> &processes) {
     simulator(processes, "Best-Fit");
     std::cout << "\n";
 
-    simulator(processes, "Worst-Fit");
+   simulator(processes, "Worst-Fit");
 }
 
 
