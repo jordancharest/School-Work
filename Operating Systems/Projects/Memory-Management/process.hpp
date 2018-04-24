@@ -29,6 +29,8 @@ public:
 
     // Modifiers
     void updateStartFrame(int frame) { starting_frame = frame; }
+    void addToArrTime(int index, int time) {arrival_times.at(index) += time; }
+    void addToEndTime(int time) { end_time += time; }
     void skipped() { current_burst++; }
     void removed() { current_burst++; }
 
