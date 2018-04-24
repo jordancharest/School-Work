@@ -71,7 +71,6 @@ void defragmentation(std::vector<char> &mem_pool, Process &proc, int &t, int &st
             }
 
             start_move = i;
-            std::cout << "Found " << free_counter << " available frames in this block starting at " << return_loc << "\n";
 
             // move the memory
             while (i < MEM_POOL_SIZE  &&  i < (start_move+free_counter-1)) {
@@ -93,8 +92,6 @@ void defragmentation(std::vector<char> &mem_pool, Process &proc, int &t, int &st
     }
 
     start_frame = i;
-
-    std::cout << "Placing process " << pid << " from frame " << i << " to " << start_frame + proc.getNumFrames() << "\n";
 
     // place the new process in memory
     for (; i < start_frame + proc.getNumFrames(); i++)
@@ -137,8 +134,6 @@ int search_mem_pool(std::vector<char> &mem_pool, int frames_needed, std::string 
                 i++;
             }
 
-            std::cout << "Found " << free_counter << " available frames in this block\n";
-
             // if we found a new best fit block
             if (algorithm == "best"  &&  free_counter < smallest  &&  free_counter >= frames_needed) {
                 start_frame = i - free_counter;
@@ -176,7 +171,6 @@ void process_removal(std::vector<char> &mem_pool, Process &proc, int t) {
     int start = proc.getStartingFrame();
     int frames = proc.getNumFrames();
 
-    std::cout << "Removing " << frames << " starting from " << start << " for process " << proc.getPID() << "\n";
     for (int i = start; i < start + frames; i++ )
         mem_pool[i] = '.';
 
