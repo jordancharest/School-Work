@@ -24,12 +24,14 @@ class Robot {
 public:
 
     // Constructor
+    Robot() {}
     Robot(int _size) : _world_size(_size) {}
 
     // Accessors
     const double x() const { return _x; }
     const double y() const { return _y; }
     const double weight() const { return _weight; }
+    const int size() const { return _world_size; }
     const std::vector<double> location() const {
         std::vector<double> location = {_x, _y, _orientation};
         return location;
@@ -42,7 +44,6 @@ public:
     void setNoise(double FN, double TN, double SN);
     void move(double forward_cmd, double turn_cmd);
     void measurement_prob(const std::vector<double> &measurements);
-
 
 
 private:

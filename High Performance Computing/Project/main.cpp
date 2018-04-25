@@ -69,16 +69,44 @@ void particle_filter(Robot &robot, std::vector<Robot> &particles, std::vector<Po
                 std::cout << measurement << "\n";
         #endif // DEBUG
 
-        // calculate importance weights for all particles based on their locations
+        // calculate importance weights for all particles based on their locations, calculate the max on the way
+        double max_weight = -1.0;
         for (auto &particle : particles) {
             particle.measurement_prob(measurements);
+            max_weight = std::max(max_weight, particle.weight());
         }
 
         #ifdef DEBUG
-            std::cout << "\nImportance weights:\n";
+            std::cout << "\nImportance weights (max = " << max_weight << "):\n";
             for (auto particle : particles)
                 std::cout << particle.weight() << "\n";
         #endif // DEBUG
+
+        // resample using the Resampling Wheel Algorithm
+        double beta = 0.0;
+        int index = uniform(generator) * N;
+        std::vector<Robot> new_particles(particles.size());
+
+        for (int i = 0; i < N; i++) {
+            beta += uniform(generator) * 2 * max_weight;
+
+            while (beta > particles[i].weight()) {
+                beta -= particles[i].weight();
+                index = (index + 1) % N;
+            }
+
+            new_particles[i] = particles[index];
+        }
+
+        particles.swap(new_particles);
+
+        #ifdef DEBUG
+            std::cout << "\nParticles after resampling (x, y, theta):\n";
+            for (auto &particle : particles)
+                std::cout << "(" << particle.x() << ", " << particle.y() << ") -- size:" << particle.size() << "\n";
+        #endif
+
+
 
 
 
