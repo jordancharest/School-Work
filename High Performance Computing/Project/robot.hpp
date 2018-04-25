@@ -4,22 +4,27 @@
 #include <vector>
 #include <random>
 #include <cmath>
+#include <functional>
 
 // random generator for particle initialization
 extern std::default_random_engine generator;
-extern std::uniform_real_distribution<double> distribution;
+extern std::uniform_real_distribution<double> uniform;
+extern std::normal_distribution<double> gaussian;
 
-
+// GLOBAL
 typedef struct {
-    int x, y;
+    double x, y;
 } Point;
 
+extern std::vector<Point> landmarks;
 
+
+// CLASS ROBOT ===================================================================================
 class Robot {
 public:
 
     // Constructor
-    Robot(int _size, std::vector<Point> _landmarks) : world_size(_size), landmarks(_landmarks) {}
+    Robot(int _size) : world_size(_size) {}
 
     // Accessors
     const double x() const { return X; }
@@ -30,7 +35,7 @@ public:
     }
 
     // Calculations
-    void sense() {}
+    void sense(std::vector<double> &measurements);
 
     // Modifiers
     void setNoise(double FN, double TN, double SN);
@@ -40,11 +45,9 @@ public:
 
 private:
     int world_size;
-    std::vector<Point> landmarks;
-    //std::vector<double> distances;
-    double X = world_size * distribution(generator);
-    double Y = world_size * distribution(generator);
-    double orientation = 2 * M_PI * distribution(generator);
+    double X = world_size * uniform(generator);
+    double Y = world_size * uniform(generator);
+    double orientation = 2 * M_PI * uniform(generator);
     double forward_noise = 0.0;
     double turn_noise = 0.0;
     double sense_noise = 0.0;
