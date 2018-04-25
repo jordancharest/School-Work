@@ -19,12 +19,35 @@ void particle_filter(Robot &robot, std::vector<Robot> &particles, double sensor_
     double allowable = 0.33 * sensor_noise;
     double mean_error = 100.0;
 
+    double forward_cmd;
+    double turn_cmd;
+
+    std::vector<double> loc;
+
     // simulate the robot moving about its environment until the solution converges
     while (mean_error > allowable) {
 
+        loc = robot.location();
+        std::cout << "(x, y, theta) --> (" << loc[0] << ", " << loc[1] << ", " <<loc[2] << ")\n";
+
+        // random robot motion
+        forward_cmd = 1 + distribution(generator) * 5;
+        if (distribution(generator) > 0.5)
+            turn_cmd = distribution(generator) * 0.3;
+        else
+            turn_cmd = - distribution(generator) * 0.3;
 
 
+        // move the robot
+        robot.move(forward_cmd, turn_cmd);
+        loc = robot.location();
 
+        // take new landmark measurements
+        robot.sense();
+
+
+        t++;
+        break;
     }
 
 

@@ -24,9 +24,17 @@ public:
     // Accessors
     const double x() const { return X; }
     const double y() const { return Y; }
+    const std::vector<double> location() const {
+        std::vector<double> location = {X, Y, orientation};
+        return location;
+    }
+
+    // Calculations
+    void sense() {}
 
     // Modifiers
     void setNoise(double FN, double TN, double SN);
+    void move(double forward_cmd, double turn_cmd);
 
 
 
