@@ -18,6 +18,9 @@ typedef struct {
 
 extern std::vector<Point> landmarks;
 
+// FUNCTION PROTOTYPES
+double modulo (double numerator, double denominator);
+
 
 // CLASS ROBOT ===================================================================================
 class Robot {

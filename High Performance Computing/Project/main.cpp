@@ -15,11 +15,23 @@ std::uniform_real_distribution<double> uniform(0.0, 1.0);
 std::normal_distribution<double> gaussian(0.0, sensor_noise);
 
 std::vector<Point> landmarks(L);
+// EVALUATE ======================================================================================
+double evaluate(const auto &robot, const auto &particles, const int world_size) {
+    double sum = 0.0;
 
+    for (auto &particle : particles) {
+        double dx = modulo((particle.x() - robot.x() + (world_size/2.0)), world_size) - (world_size/2.0);
+        double dy = modulo((particle.y() - robot.y() + (world_size/2.0)), world_size) - (world_size/2.0);
+        sum += sqrt(dx*dx + dy*dy);
+    }
+
+    return sum / particles.size();
+}
 
 
 // PARTICLE FILTER ===============================================================================
-void particle_filter(Robot &robot, std::vector<Robot> &particles, std::vector<Point> &landmarks, double sensor_noise) {
+void particle_filter(Robot &robot, std::vector<Robot> &particles, std::vector<Point> &landmarks,
+                      const int world_size) {
 
     int t = 0;
     double allowable = 0.33 * sensor_noise;
@@ -90,8 +102,8 @@ void particle_filter(Robot &robot, std::vector<Robot> &particles, std::vector<Po
         for (int i = 0; i < N; i++) {
             beta += uniform(generator) * 2 * max_weight;
 
-            while (beta > particles[i].weight()) {
-                beta -= particles[i].weight();
+            while (beta > particles[index].weight()) {
+                beta -= particles[index].weight();
                 index = (index + 1) % N;
             }
 
@@ -107,12 +119,18 @@ void particle_filter(Robot &robot, std::vector<Robot> &particles, std::vector<Po
         #endif
 
 
+        mean_error = evaluate(robot, particles, world_size);
+
+        #ifdef DEBUG
+            std::cout << "Mean Error: " << mean_error << "\n\n";
+        #endif // DEBUG
 
 
 
 
         t++;
-        break;
+        //if (t == 10)
+          //  break;
     }
 
 
@@ -131,9 +149,7 @@ int main(int argc, char** argv) {
 
     generator.seed(seed);
 
-
     int world_size = 10;   // circular world
-    double sensor_noise = 3.0;
 
     // Initialize L random landmarks
     Point landmark;
@@ -168,7 +184,7 @@ int main(int argc, char** argv) {
         }
     #endif
 
-    particle_filter(robot, particles, landmarks, sensor_noise);
+    particle_filter(robot, particles, landmarks, world_size);
 
 
 
