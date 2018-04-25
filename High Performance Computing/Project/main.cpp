@@ -5,7 +5,7 @@
 #include "robot.hpp"
 
 // GLOBAL
-int N = 10;    // number of particles
+int N = 50;    // number of particles
 int L = 4;     // number of landmarks
 double sensor_noise = 1.0;
 
@@ -47,6 +47,7 @@ void particle_filter(Robot &robot, std::vector<Robot> &particles, std::vector<Po
     while (mean_error > allowable) {
 
         loc = robot.location();
+        std::cout << "ROBOT(before): (x, y, theta) --> (" << loc[0] << ", " << loc[1] << ", " << loc[2] << ")\n";
 
         // define a random movement
         forward_cmd = 1 + uniform(generator) * 5;
@@ -57,15 +58,16 @@ void particle_filter(Robot &robot, std::vector<Robot> &particles, std::vector<Po
 
 
         // move the robot
+        std::cout << "Command: (" << forward_cmd << ", " << turn_cmd << ")\n";
         robot.move(forward_cmd, turn_cmd);
         loc = robot.location();
-        std::cout << "ROBOT: (x, y, theta) --> (" << loc[0] << ", " << loc[1] << ", " << loc[2] << ")\n";
+        std::cout << "ROBOT(after): (x, y, theta) --> (" << loc[0] << ", " << loc[1] << ", " << loc[2] << ")\n";
 
         // simulate the same motion update for all particles
         for (auto &particle : particles)
             particle.move(forward_cmd, turn_cmd);
 
-        #ifdef DEBUG
+        #if 0
             std::cout << "Particles are now at (x, y, theta):\n";
             for (auto &particle : particles) {
                 std::cout << "(" << particle.x() << ", " << particle.y() << ")\n";
@@ -75,7 +77,7 @@ void particle_filter(Robot &robot, std::vector<Robot> &particles, std::vector<Po
         // take sensor measurements to all the landmarks
         robot.sense(measurements);
 
-        #ifdef DEBUG
+        #if 0
             std::cout << "\nLandmark sensor measurements:\n";
             for (auto measurement : measurements)
                 std::cout << measurement << "\n";
@@ -112,7 +114,7 @@ void particle_filter(Robot &robot, std::vector<Robot> &particles, std::vector<Po
 
         particles.swap(new_particles);
 
-        #ifdef DEBUG
+        #if 0
             std::cout << "\nParticles after resampling (x, y, theta):\n";
             for (auto &particle : particles)
                 std::cout << "(" << particle.x() << ", " << particle.y() << ") -- size:" << particle.size() << "\n";
@@ -121,7 +123,7 @@ void particle_filter(Robot &robot, std::vector<Robot> &particles, std::vector<Po
 
         mean_error = evaluate(robot, particles, world_size);
 
-        #ifdef DEBUG
+        #if 1
             std::cout << "Mean Error: " << mean_error << "\n\n";
         #endif // DEBUG
 
@@ -130,7 +132,7 @@ void particle_filter(Robot &robot, std::vector<Robot> &particles, std::vector<Po
 
         t++;
         //if (t == 10)
-          //  break;
+            break;
     }
 
 
@@ -149,7 +151,7 @@ int main(int argc, char** argv) {
 
     generator.seed(seed);
 
-    int world_size = 10;   // circular world
+    int world_size = 100;   // circular world
 
     // Initialize L random landmarks
     Point landmark;

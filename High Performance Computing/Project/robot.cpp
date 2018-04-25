@@ -1,6 +1,8 @@
 //#include <boost/range/combine.hpp>    // Most people probably aren't using C++17
 #include <stdexcept>
 #include <cmath>
+#include <cfloat>
+#include <iostream>
 
 #include "robot.hpp"
 // GAUSSIAN PROBABILITY ==========================================================================
@@ -32,8 +34,13 @@ void Robot::move(double forward_cmd, double turn_cmd) {
     _orientation += turn_cmd;
     _orientation = modulo(_orientation, 2 * M_PI);
 
-    _x += modulo(forward_cmd * std::cos(_orientation), _world_size);    // cyclic truncation
-    _y += modulo(forward_cmd * std::sin(_orientation), _world_size);    // cyclic truncation
+    std::cout << modulo(forward_cmd * std::cos(_orientation), _world_size) << " " << modulo(forward_cmd * std::sin(_orientation), _world_size) << "\n";
+
+    _x += forward_cmd * std::cos(_orientation);    // cyclic truncation
+    _y += forward_cmd * std::sin(_orientation);    // cyclic truncation
+
+    _x = modulo(_x, _world_size);
+    _y = modulo(_y, _world_size);
 }
 
 
@@ -59,8 +66,12 @@ void Robot::sense(std::vector<double> &measurements) {
 void Robot::measurement_prob(std::vector<double> const& measurements) {
     _weight = 1.0;
     double distance;
+
     for (size_t i = 0; i < measurements.size(); i++) {
         distance = sqrt(pow(_x - landmarks[i].x, 2) + pow(_y - landmarks[i].y, 2));
         _weight *= gaussian_probability(distance, _sense_noise, measurements[i]);
     }
+
+    if (_weight == 0)
+        _weight = DBL_MIN;
 }
