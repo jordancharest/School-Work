@@ -27,10 +27,11 @@ public:
     Robot(int _size) : world_size(_size) {}
 
     // Accessors
-    const double x() const { return X; }
-    const double y() const { return Y; }
+    const double x() const { return _x; }
+    const double y() const { return _y; }
+    const double weight() const { return _weight; }
     const std::vector<double> location() const {
-        std::vector<double> location = {X, Y, orientation};
+        std::vector<double> location = {_x, _y, _orientation};
         return location;
     }
 
@@ -40,20 +41,19 @@ public:
     // Modifiers
     void setNoise(double FN, double TN, double SN);
     void move(double forward_cmd, double turn_cmd);
+    void measurement_prob(const std::vector<double> &measurements);
 
 
 
 private:
     int world_size;
-    double X = world_size * uniform(generator);
-    double Y = world_size * uniform(generator);
-    double orientation = 2 * M_PI * uniform(generator);
-    double forward_noise = 0.0;
-    double turn_noise = 0.0;
-    double sense_noise = 0.0;
-
-
-
+    double _x = world_size * uniform(generator);
+    double _y = world_size * uniform(generator);
+    double _orientation = 2 * M_PI * uniform(generator);
+    double _forward_noise = 0.0;
+    double _turn_noise = 0.0;
+    double _sense_noise = 0.0;
+    double _weight = 0.0;    // importance weight; calculated after robot sensor updates
 };
 
 

@@ -56,14 +56,13 @@ void particle_filter(Robot &robot, std::vector<Robot> &particles, std::vector<Po
         // take sensor measurements to all the landmarks
         robot.sense(measurements);
 
-        // calculate importance weights for all particles based on the accuracy of their measurements
+        // calculate importance weights for all particles based on their locations
         for (auto particle : particles) {
-
-
-
+            particle.measurement_prob(measurements);
         }
 
         #ifdef DEBUG
+            std::cout << "\nLandmark sensor measurements:\n";
             for (auto measurement : measurements)
                 std::cout << measurement << "\n";
         #endif // DEBUG

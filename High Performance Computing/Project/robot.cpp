@@ -3,6 +3,11 @@
 #include <cmath>
 
 #include "robot.hpp"
+// GAUSSIAN PROBABILITY ==========================================================================
+inline double gaussian_probability(double mu, double sigma, double x) {
+    return exp(- (pow(mu - x, 2)) / (pow(sigma, 2) * 2.0)) / sqrt(2.0 * M_PI * pow(sigma, 2));
+}
+
 
 // MODULO ========================================================================================
 /* C++ '%' doesn't work the way I want with negative numbers                                    */
@@ -13,9 +18,9 @@ inline double modulo (double numerator, double denominator) {
 
 // SET NOISE =====================================================================================
 void Robot::setNoise(double FN, double TN, double SN) {
-    forward_noise = FN;
-    turn_noise = TN;
-    sense_noise = SN;
+    _forward_noise = FN;
+    _turn_noise = TN;
+    _sense_noise = SN;
 }
 
 
@@ -24,11 +29,11 @@ void Robot::move(double forward_cmd, double turn_cmd) {
     if (forward_cmd < 0)
         throw std::invalid_argument("Robot cannot move backwards");
 
-    orientation += turn_cmd;
-    orientation = modulo(orientation, 2 * M_PI);
+    _orientation += turn_cmd;
+    _orientation = modulo(_orientation, 2 * M_PI);
 
-    X += forward_cmd * std::cos(orientation);
-    Y += forward_cmd * std::sin(orientation);
+    _x += forward_cmd * std::cos(_orientation);
+    _y += forward_cmd * std::sin(_orientation);
 }
 
 
@@ -43,7 +48,19 @@ void Robot::sense(std::vector<double> &measurements) {
     */
 
     for (size_t i = 0; i < landmarks.size(); i++) {
-        measurements[i] = sqrt(pow(X-landmarks[i].x, 2) + pow(Y-landmarks[i].y, 2));
+        measurements[i] = sqrt(pow(_x - landmarks[i].x, 2) + pow(_y - landmarks[i].y, 2));
         measurements[i] += gaussian(generator);
+    }
+}
+
+// MEASUREMENT PROBABILITY =======================================================================
+/* Calculate how likely a list of measurements are, given a particles current location
+    and the vector of sensor measurements taken by the robot                                    */
+void Robot::measurement_prob(std::vector<double> const& measurements) {
+    _weight = 1.0;
+    double distance;
+    for (size_t i = 0; i < measurements.size(); i++) {
+        distance = sqrt(pow(_x - landmarks[i].x, 2) + pow(_y - landmarks[i].y, 2));
+        _weight *= gaussian_probability(distance, _sense_noise, measurements[i]);
     }
 }
