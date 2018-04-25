@@ -24,7 +24,7 @@ class Robot {
 public:
 
     // Constructor
-    Robot(int _size) : world_size(_size) {}
+    Robot(int _size) : _world_size(_size) {}
 
     // Accessors
     const double x() const { return _x; }
@@ -46,9 +46,9 @@ public:
 
 
 private:
-    int world_size;
-    double _x = world_size * uniform(generator);
-    double _y = world_size * uniform(generator);
+    int _world_size;
+    double _x = _world_size * uniform(generator);
+    double _y = _world_size * uniform(generator);
     double _orientation = 2 * M_PI * uniform(generator);
     double _forward_noise = 0.0;
     double _turn_noise = 0.0;

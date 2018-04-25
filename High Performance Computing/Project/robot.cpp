@@ -32,8 +32,8 @@ void Robot::move(double forward_cmd, double turn_cmd) {
     _orientation += turn_cmd;
     _orientation = modulo(_orientation, 2 * M_PI);
 
-    _x += forward_cmd * std::cos(_orientation);
-    _y += forward_cmd * std::sin(_orientation);
+    _x += modulo(forward_cmd * std::cos(_orientation), _world_size);    // cyclic truncation
+    _y += modulo(forward_cmd * std::sin(_orientation), _world_size);    // cyclic truncation
 }
 
 

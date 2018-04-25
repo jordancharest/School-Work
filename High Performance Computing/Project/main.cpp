@@ -47,25 +47,40 @@ void particle_filter(Robot &robot, std::vector<Robot> &particles, std::vector<Po
         // move the robot
         robot.move(forward_cmd, turn_cmd);
         loc = robot.location();
-        std::cout << "(x, y, theta) --> (" << loc[0] << ", " << loc[1] << ", " << loc[2] << ")\n";
+        std::cout << "ROBOT: (x, y, theta) --> (" << loc[0] << ", " << loc[1] << ", " << loc[2] << ")\n";
 
         // simulate the same motion update for all particles
-        for (auto particle : particles)
+        for (auto &particle : particles)
             particle.move(forward_cmd, turn_cmd);
+
+        #ifdef DEBUG
+            std::cout << "Particles are now at (x, y, theta):\n";
+            for (auto &particle : particles) {
+                std::cout << "(" << particle.x() << ", " << particle.y() << ")\n";
+            }
+        #endif
 
         // take sensor measurements to all the landmarks
         robot.sense(measurements);
-
-        // calculate importance weights for all particles based on their locations
-        for (auto particle : particles) {
-            particle.measurement_prob(measurements);
-        }
 
         #ifdef DEBUG
             std::cout << "\nLandmark sensor measurements:\n";
             for (auto measurement : measurements)
                 std::cout << measurement << "\n";
         #endif // DEBUG
+
+        // calculate importance weights for all particles based on their locations
+        for (auto &particle : particles) {
+            particle.measurement_prob(measurements);
+        }
+
+        #ifdef DEBUG
+            std::cout << "\nImportance weights:\n";
+            for (auto particle : particles)
+                std::cout << particle.weight() << "\n";
+        #endif // DEBUG
+
+
 
 
         t++;
@@ -106,7 +121,7 @@ int main(int argc, char** argv) {
     #endif
 
 
-
+    // Initialize the robot to a random location
     Robot robot(world_size);
     robot.setNoise(0.0, 0.0, sensor_noise);
 
@@ -119,8 +134,9 @@ int main(int argc, char** argv) {
     }
 
     #ifdef DEBUG
+    std::cout << "Particles are initialized to (x, y, theta):\n";
         for (auto &particle : particles) {
-            std::cout << "Particle initialized to: (" << particle.x() << ", " << particle.y() << ")\n";
+            std::cout << "(" << particle.x() << ", " << particle.y() << ")\n";
         }
     #endif
 
