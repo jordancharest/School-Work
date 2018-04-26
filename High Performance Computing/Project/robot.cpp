@@ -11,14 +11,6 @@ inline double gaussian_probability(double mu, double sigma, double x) {
     return exp(- (pow(mu - x, 2)) / (pow(sigma, 2) * 2.0)) / sqrt(2.0 * M_PI * pow(sigma, 2));
 }
 
-
-// MODULO ========================================================================================
-/* C++ '%' doesn't work the way I want with negative numbers                                    */
-inline double modulo (double numerator, double denominator) {
-	return (fmod((fmod(numerator, denominator) + denominator), denominator));
-}
-
-
 // SET NOISE =====================================================================================
 void Robot::setNoise(double FN, double TN, double SN) {
     _forward_noise = FN;

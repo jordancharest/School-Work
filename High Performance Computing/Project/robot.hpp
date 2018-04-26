@@ -19,8 +19,11 @@ typedef struct {
 
 extern std::vector<Point> landmarks;
 
-// FUNCTION PROTOTYPES
-double modulo (double numerator, double denominator);
+// MODULO ========================================================================================
+/* C++ '%' doesn't work the way I want with negative numbers                                    */
+inline double modulo (double numerator, double denominator) {
+	return (fmod((fmod(numerator, denominator) + denominator), denominator));
+}
 
 
 // CLASS ROBOT ===================================================================================
