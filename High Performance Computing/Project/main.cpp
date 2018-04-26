@@ -12,12 +12,12 @@
 #include "robot.hpp"
 
 // GLOBAL - for access by all threads
-static int world_size = 50;   // toroidal world
-static int N = 128;           // number of particles
+static int world_size = 256;   // toroidal world
+static int N = 1024;           // number of particles
 static int L = 4;              // number of landmarks
 static const double SENSOR_NOISE = 3.0;
 static const double MOVE_NOISE = 0.08;
-static const double ALLOWABLE = 0.33 * SENSOR_NOISE;
+static const double ALLOWABLE = 0.4 * SENSOR_NOISE;
 double mean_error = 100.0;
 std::atomic<double> max_weight(-1.0);
 
@@ -36,9 +36,7 @@ std::normal_distribution<double> gaussian(0.0, SENSOR_NOISE);
 std::normal_distribution<double> gaussian_move(0.0, MOVE_NOISE);
 
 // to create a thread barrier for sychronization
-std::mutex mtx;
-std::condition_variable cv;
-bool ready = false;
+pthread_barrier_t barrier;
 
 
 // EVALUATE ======================================================================================
@@ -64,6 +62,14 @@ double parallel_particle_filter(int num_threads, int index) {
     int particle_index = N / num_threads * index;
 
     std::cerr << "Thread " << index << " computing particles from " << particle_index << " to " << particle_index + particles_per_thread << "\n";
+    #ifdef DEBUG
+    if (index == 0) {
+        for (auto &landmark : landmarks)
+            std::cout << "Landmark: (" << landmark.x << ", " << landmark.y << ")\n";
+    }
+    #endif // DEBUG
+
+
 
     using namespace std::chrono;
     high_resolution_clock::time_point start;
@@ -71,6 +77,8 @@ double parallel_particle_filter(int num_threads, int index) {
 
     int t = 0;
     mean_error = 100.0;
+
+    std::vector<double> loc;
 
     // simulate the robot moving about its environment until the solution converges
     while (mean_error > ALLOWABLE) {
@@ -89,43 +97,42 @@ double parallel_particle_filter(int num_threads, int index) {
         }
 
         // BARRIER
-        if (index != 0) {
-            std::unique_lock<std::mutex> lck(mtx);
-            while (!ready) cv.wait(lck);
-        } else {
-            std::unique_lock<std::mutex> lck(mtx);
-            ready = true;
-            cv.notify_all();
-        }
+        pthread_barrier_wait(&barrier);
 
         // move the robot
-        if (index == 0)
+        if (index == 0) {
             parallel_robot.move(forward_cmd, turn_cmd);
+            parallel_robot.sense(measurements);
+        }
+
+
+        #ifdef DEBUG
+        if (index == 0  &&  t < 3) {
+            loc = parallel_robot.location();
+            std::cout << "Robot is at (" << loc[0] << ", " << loc[1] << ", " << loc[2] << ")\n";
+        }
+        #endif // DEBUG
+
+        #ifdef DEBUG
+        if (index == 0  &&  t < 3) {
+            std::cout << "\nLandmark sensor measurements:\n";
+            for (auto measurement : measurements)
+                std::cout << measurement << "\n";
+        }
+        #endif // DEBUG
 
         // simulate the same motion update for all particles
         for (int i = particle_index; i < particle_index + particles_per_thread; i++)
             particles[i].move(forward_cmd, turn_cmd);
 
-        #ifdef DEBUG
-        if (index == 0) {
+        #if 0
+        if (index == 0 && t == 0) {
             std::cout << "Particles are now at (x, y, theta):\n";
             for (auto &particle : particles) {
                 std::cout << "(" << particle.x() << ", " << particle.y() << ")\n";
             }
         }
         #endif
-
-        // take sensor measurements to all the landmarks
-        if (index == 0)
-            parallel_robot.sense(measurements);
-
-        #ifdef DEBUG
-        if (index == 0) {
-            std::cout << "\nLandmark sensor measurements:\n";
-            for (auto measurement : measurements)
-                std::cout << measurement << "\n";
-        }
-        #endif // DEBUG
 
         // calculate importance weights for all particles based on their locations, calculate the max on the way
         double p_max_weight = -1.0;
@@ -137,7 +144,7 @@ double parallel_particle_filter(int num_threads, int index) {
         if (p_max_weight > max_weight)
             max_weight = p_max_weight;
 
-        #ifdef DEBUG
+        #if 0
         if (index == 0) {
             std::cout << "\nImportance weights (max = " << max_weight << "):\n";
             for (auto &particle : particles)
@@ -145,6 +152,9 @@ double parallel_particle_filter(int num_threads, int index) {
         }
         #endif // DEBUG
 
+
+        // BARRIER
+        pthread_barrier_wait(&barrier);
 
 
         // NEEDS PARALLELIZATION
@@ -177,18 +187,23 @@ double parallel_particle_filter(int num_threads, int index) {
 
         }
 
+        // BARRIER
+        pthread_barrier_wait(&barrier);
+
         t++;
     }
+
+    std::cerr << "Thread " << index << " exiting\n";
 
     return total_time;
 }
 
 
 // PARALLEL INIT =================================================================================
-double parallel(int num_threads) {
+void parallel(int num_threads) {
 
     using namespace std::chrono;
-    double total_time = 0.0;
+    //double total_time = 0.0;
 
     std::cout << "\nParallel Particle Filter - " << num_threads << " threads\n";
     std::cout << std::setw(6) << "time" << "  |  " << std::setw(12) << " Mean Error " << "  |  "
@@ -217,11 +232,18 @@ double serial_particle_filter(Robot &robot) {
     using namespace std::chrono;
     double total_time = 0.0;
 
+    #ifdef DEBUG
+    for (auto &landmark : landmarks)
+        std::cout << "Landmark: (" << landmark.x << ", " << landmark.y << ")\n";
+    #endif // DEBUG
+
+
     std::cout << "\nSerial Particle Filter\n";
     std::cout << std::setw(6) << "time" << "  |  " << std::setw(14) << " Mean Error " << "  |  "
               << std::setw(10) << "Loop Time\n";
 
     int t = 0;
+    std::vector<double> loc;
 
     // simulate the robot moving about its environment until the solution converges
     while (mean_error > ALLOWABLE) {
@@ -238,12 +260,39 @@ double serial_particle_filter(Robot &robot) {
         // move the robot
         robot.move(forward_cmd, turn_cmd);
 
+        #ifdef DEBUG
+        if (t < 3) {
+            loc = robot.location();
+            std::cout << "Robot is at (" << loc[0] << ", " << loc[1] << ", " << loc[2] << ")\n";
+        }
+        #endif // DEBUG
+
+
+
         // simulate the same motion update for all particles
         for (auto &particle : particles)
             particle.move(forward_cmd, turn_cmd);
 
+        #if 0
+        if (t == 0) {
+            std::cout << "Particles are now at (x, y, theta):\n";
+            for (auto &particle : particles) {
+                std::cout << "(" << particle.x() << ", " << particle.y() << ")\n";
+            }
+        }
+        #endif
+
         // take sensor measurements to all the landmarks
         robot.sense(measurements);
+
+        #ifdef DEBUG
+        if (t < 3) {
+            std::cout << "\nLandmark sensor measurements:\n";
+            for (auto measurement : measurements)
+                std::cout << measurement << "\n";
+        }
+        #endif // DEBUG
+
 
         // calculate importance weights for all particles based on their locations, calculate the max on the way
         double max_weight = -1.0;
@@ -329,9 +378,12 @@ int main(int argc, char** argv) {
 
     }
 
+    // Initialize pthread barrier to block all threads in a process
+	pthread_barrier_init(&barrier, NULL, num_threads);
+
 
     // seed for random particle generation
-    int seed = 420; //time(0);
+    int seed = time(0);
     std::vector<double> loc;
 
     // Initialize the robot to a random location and define noise levels; start the serial simulation
