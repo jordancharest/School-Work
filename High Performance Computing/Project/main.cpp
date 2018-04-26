@@ -1,18 +1,22 @@
 #include <iostream>
+#include <iomanip>
 #include <vector>
 #include <thread>
+#include <ctime>
 
 #include "robot.hpp"
 
 // GLOBAL
-int N = 50;    // number of particles
+int N = 500;    // number of particles
 int L = 4;     // number of landmarks
-double sensor_noise = 1.0;
+double sensor_noise = 3.0;
+double move_noise = 0.08;
 
 // random generator for particle initialization
 std::default_random_engine generator;
 std::uniform_real_distribution<double> uniform(0.0, 1.0);
 std::normal_distribution<double> gaussian(0.0, sensor_noise);
+std::normal_distribution<double> gaussian_move(0.0, move_noise);
 
 std::vector<Point> landmarks(L);
 // EVALUATE ======================================================================================
@@ -25,13 +29,16 @@ double evaluate(const auto &robot, const auto &particles, const int world_size) 
         sum += sqrt(dx*dx + dy*dy);
     }
 
-    return sum / particles.size();
+    return sum / N;
 }
 
 
 // PARTICLE FILTER ===============================================================================
 void particle_filter(Robot &robot, std::vector<Robot> &particles, std::vector<Point> &landmarks,
                       const int world_size) {
+
+    std::cout << "Serial Particle Filter\n";
+    std::cout << std::setw(6) << "time" << "  |  " << std::setw(10) << "Mean Error\n";
 
     int t = 0;
     double allowable = 0.33 * sensor_noise;
@@ -46,9 +53,6 @@ void particle_filter(Robot &robot, std::vector<Robot> &particles, std::vector<Po
     // simulate the robot moving about its environment until the solution converges
     while (mean_error > allowable) {
 
-        loc = robot.location();
-        std::cout << "ROBOT(before): (x, y, theta) --> (" << loc[0] << ", " << loc[1] << ", " << loc[2] << ")\n";
-
         // define a random movement
         forward_cmd = 1 + uniform(generator) * 5;
         if (uniform(generator) > 0.5)
@@ -58,10 +62,9 @@ void particle_filter(Robot &robot, std::vector<Robot> &particles, std::vector<Po
 
 
         // move the robot
-        std::cout << "Command: (" << forward_cmd << ", " << turn_cmd << ")\n";
         robot.move(forward_cmd, turn_cmd);
         loc = robot.location();
-        std::cout << "ROBOT(after): (x, y, theta) --> (" << loc[0] << ", " << loc[1] << ", " << loc[2] << ")\n";
+        //std::cout << "ROBOT(after): (x, y, theta) --> (" << loc[0] << ", " << loc[1] << ", " << loc[2] << ")\n";
 
         // simulate the same motion update for all particles
         for (auto &particle : particles)
@@ -88,11 +91,12 @@ void particle_filter(Robot &robot, std::vector<Robot> &particles, std::vector<Po
         for (auto &particle : particles) {
             particle.measurement_prob(measurements);
             max_weight = std::max(max_weight, particle.weight());
+            //std::cout << "Weight: " << particle.weight() << "\n";
         }
 
-        #ifdef DEBUG
+        #if 0
             std::cout << "\nImportance weights (max = " << max_weight << "):\n";
-            for (auto particle : particles)
+            for (auto &particle : particles)
                 std::cout << particle.weight() << "\n";
         #endif // DEBUG
 
@@ -102,7 +106,8 @@ void particle_filter(Robot &robot, std::vector<Robot> &particles, std::vector<Po
         std::vector<Robot> new_particles(particles.size());
 
         for (int i = 0; i < N; i++) {
-            beta += uniform(generator) * 2 * max_weight;
+            beta += uniform(generator) * 2.0 * max_weight;
+            //std::cout << beta << "\n";
 
             while (beta > particles[index].weight()) {
                 beta -= particles[index].weight();
@@ -122,17 +127,11 @@ void particle_filter(Robot &robot, std::vector<Robot> &particles, std::vector<Po
 
 
         mean_error = evaluate(robot, particles, world_size);
-
-        #if 1
-            std::cout << "Mean Error: " << mean_error << "\n\n";
-        #endif // DEBUG
-
-
-
+        std::cout << std::setw(6) << t << "  |  " << mean_error << "\n";
 
         t++;
-        //if (t == 10)
-            break;
+        //if (t == 100)
+            //break;
     }
 
 
@@ -147,7 +146,7 @@ int main(int argc, char** argv) {
     // seed for random particle generation
     int seed;
     if (argc == 2) seed = atoi(argv[1]);
-    else seed = 42;
+    else seed = time(0);
 
     generator.seed(seed);
 
@@ -160,7 +159,7 @@ int main(int argc, char** argv) {
         landmark.y = uniform(generator) * world_size;
         landmarks[i] = landmark;
     }
-    #ifdef DEBUG
+    #if 0
         for (auto &landmark : landmarks) {
             std::cout << "Landmark: (" << landmark.x << ", " << landmark.y << ")\n";
         }
@@ -169,17 +168,17 @@ int main(int argc, char** argv) {
 
     // Initialize the robot to a random location
     Robot robot(world_size);
-    robot.setNoise(0.0, 0.0, sensor_noise);
+    robot.setNoise(move_noise, move_noise, sensor_noise);
 
     // Initialize N random particles
     std::vector<Robot> particles;
     for (int i = 0; i < N; i++) {
         Robot particle(world_size);
-        particle.setNoise(0.0, 0.0, sensor_noise);
+        particle.setNoise(move_noise, move_noise, sensor_noise);
         particles.push_back(particle);
     }
 
-    #ifdef DEBUG
+    #if 0
     std::cout << "Particles are initialized to (x, y, theta):\n";
         for (auto &particle : particles) {
             std::cout << "(" << particle.x() << ", " << particle.y() << ")\n";

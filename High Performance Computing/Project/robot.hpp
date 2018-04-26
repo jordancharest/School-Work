@@ -10,6 +10,7 @@
 extern std::default_random_engine generator;
 extern std::uniform_real_distribution<double> uniform;
 extern std::normal_distribution<double> gaussian;
+extern std::normal_distribution<double> gaussian_move;
 
 // GLOBAL
 typedef struct {

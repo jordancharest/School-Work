@@ -7,6 +7,7 @@
 #include "robot.hpp"
 // GAUSSIAN PROBABILITY ==========================================================================
 inline double gaussian_probability(double mu, double sigma, double x) {
+    //std::cout << exp(- (pow(mu - x, 2)) / (pow(sigma, 2) * 2.0)) / sqrt(2.0 * M_PI * pow(sigma, 2)) << "\n";
     return exp(- (pow(mu - x, 2)) / (pow(sigma, 2) * 2.0)) / sqrt(2.0 * M_PI * pow(sigma, 2));
 }
 
@@ -31,10 +32,11 @@ void Robot::move(double forward_cmd, double turn_cmd) {
     if (forward_cmd < 0)
         throw std::invalid_argument("Robot cannot move backwards");
 
+    forward_cmd += gaussian_move(generator);
+    turn_cmd += gaussian_move(generator);
+
     _orientation += turn_cmd;
     _orientation = modulo(_orientation, 2 * M_PI);
-
-    std::cout << modulo(forward_cmd * std::cos(_orientation), _world_size) << " " << modulo(forward_cmd * std::sin(_orientation), _world_size) << "\n";
 
     _x += forward_cmd * std::cos(_orientation);    // cyclic truncation
     _y += forward_cmd * std::sin(_orientation);    // cyclic truncation
@@ -70,8 +72,9 @@ void Robot::measurement_prob(std::vector<double> const& measurements) {
     for (size_t i = 0; i < measurements.size(); i++) {
         distance = sqrt(pow(_x - landmarks[i].x, 2) + pow(_y - landmarks[i].y, 2));
         _weight *= gaussian_probability(distance, _sense_noise, measurements[i]);
+        //std::cout << "i: " << i << "  weight: " << _weight << "\n";
     }
 
-    if (_weight == 0)
-        _weight = DBL_MIN;
+    //if (_weight == 0)
+      //  _weight = DBL_MIN * 10;
 }
