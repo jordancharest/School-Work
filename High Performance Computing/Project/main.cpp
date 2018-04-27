@@ -14,11 +14,10 @@
 // GLOBAL - for access by all threads
 static int world_size = 256;   // toroidal world
 static int N = 1024;           // number of particles
-static int L = 4;              // number of landmarks
+static int L = 10;              // number of landmarks
 static const double SENSOR_NOISE = 3.0;
 static const double MOVE_NOISE = 0.08;
 static const double ALLOWABLE = 0.4 * SENSOR_NOISE;
-double mean_error = 100.0;
 std::atomic<double> max_weight(-1.0);
 
 static double forward_cmd;
@@ -40,7 +39,22 @@ pthread_barrier_t barrier;
 
 
 // EVALUATE ======================================================================================
-double evaluate(const auto &robot, const auto &particles, const int world_size) {
+void parallel_evaluate(std::atomic<double> &mean_error, const auto &robot, int particle_index, int particles_per_thread) {
+    double sum = 0.0;
+    double dx, dy;
+
+    for (int i = particle_index; i < particle_index + particles_per_thread; i++) {
+        dx = modulo((particles[i].x() - robot.x() + (world_size/2.0)), world_size) - (world_size/2.0);
+        dy = modulo((particles[i].y() - robot.y() + (world_size/2.0)), world_size) - (world_size/2.0);
+        sum += sqrt(dx*dx + dy*dy);
+    }
+
+    mean_error = mean_error + sum / N;
+}
+
+
+// EVALUATE ======================================================================================
+void evaluate(double &mean_error, const auto &robot) {
     double sum = 0.0;
     double dx, dy;
 
@@ -50,13 +64,13 @@ double evaluate(const auto &robot, const auto &particles, const int world_size) 
         sum += sqrt(dx*dx + dy*dy);
     }
 
-    return sum / N;
+    mean_error = sum / N;
 }
 
 
 
 // PARALLEL PARTICLE FILTER ======================================================================
-double parallel_particle_filter(int num_threads, int index) {
+void parallel_particle_filter(int num_threads, int index) {
 
     int particles_per_thread = N / num_threads;
     int particle_index = N / num_threads * index;
@@ -76,7 +90,7 @@ double parallel_particle_filter(int num_threads, int index) {
     double total_time = 0.0;
 
     int t = 0;
-    mean_error = 100.0;
+    std::atomic<double>mean_error(100.0);
 
     std::vector<double> loc;
 
@@ -86,6 +100,7 @@ double parallel_particle_filter(int num_threads, int index) {
         // only main will randomize the move command
         if (index == 0) {
             max_weight = -1.0;
+            mean_error = 0.0;
             start = high_resolution_clock::now();
 
             // define a random movement
@@ -106,14 +121,14 @@ double parallel_particle_filter(int num_threads, int index) {
         }
 
 
-        #ifdef DEBUG
+        #if 0
         if (index == 0  &&  t < 3) {
             loc = parallel_robot.location();
             std::cout << "Robot is at (" << loc[0] << ", " << loc[1] << ", " << loc[2] << ")\n";
         }
         #endif // DEBUG
 
-        #ifdef DEBUG
+        #if 0
         if (index == 0  &&  t < 3) {
             std::cout << "\nLandmark sensor measurements:\n";
             for (auto measurement : measurements)
@@ -156,36 +171,40 @@ double parallel_particle_filter(int num_threads, int index) {
         // BARRIER
         pthread_barrier_wait(&barrier);
 
-
-        // NEEDS PARALLELIZATION
         if (index == 0) {
-            // resample using the Resampling Wheel Algorithm
-            double beta = 0.0;
-            int index = uniform(generator) * N;
-            std::vector<Robot> new_particles(particles.size());
+        // resample using the Resampling Wheel Algorithm
+        double beta = 0.0;
+        int index = uniform(generator) * N;
+        std::vector<Robot> new_particles(particles.size());
 
-            for (int i = 0; i < N; i++) {
-                beta += uniform(generator) * 2.0 * max_weight;
+        for (int i = 0; i < N; i++) {
+            beta += uniform(generator) * 2.0 * max_weight;
 
-                while (beta > particles[index].weight()) {
-                    beta -= particles[index].weight();
-                    index = (index + 1) % N;
-                }
-
-                new_particles[i] = particles[index];
+            while (beta > particles[index].weight()) {
+                beta -= particles[index].weight();
+                index = (index + 1) % N;
             }
 
+            new_particles[i] = particles[index];
+        }
+        //}
+        // BARRIER
+        //pthread_barrier_wait(&barrier);
+
+        //if (index == 0) {
             particles.swap(new_particles);
+        }
 
-            mean_error = evaluate(parallel_robot, particles, world_size);
+        parallel_evaluate(mean_error, parallel_robot, particle_index, particles_per_thread);
 
+
+        if (index == 0) {
             high_resolution_clock::time_point finish = high_resolution_clock::now();
             duration<double> span = duration_cast<duration<double> >(finish-start);
             total_time += span.count();
             std::cout << std::setw(6) << t << "  |     " << std::setw(10) << std::fixed << mean_error << "   |  " << span.count() << "\n";
-
-
         }
+
 
         // BARRIER
         pthread_barrier_wait(&barrier);
@@ -193,9 +212,10 @@ double parallel_particle_filter(int num_threads, int index) {
         t++;
     }
 
-    std::cerr << "Thread " << index << " exiting\n";
+    if (index == 0)
+        std::cout << "Solution Converged. Average update time: " << total_time/t << std::endl;
 
-    return total_time;
+    std::cerr << "Thread " << index << " exiting\n";
 }
 
 
@@ -220,9 +240,6 @@ void parallel(int num_threads) {
 
     for (int i = 1; i < num_threads; i++)
         threads[i].join();
-
-    std::cout << "Solution Converged.\n";
-
 }
 
 
@@ -244,6 +261,7 @@ double serial_particle_filter(Robot &robot) {
 
     int t = 0;
     std::vector<double> loc;
+    double mean_error = 100.0;
 
     // simulate the robot moving about its environment until the solution converges
     while (mean_error > ALLOWABLE) {
@@ -320,7 +338,7 @@ double serial_particle_filter(Robot &robot) {
         particles.swap(new_particles);
 
         // calculate the mean error
-        mean_error = evaluate(robot, particles, world_size);
+        evaluate(mean_error, robot);
 
         // log
         high_resolution_clock::time_point finish = high_resolution_clock::now();
@@ -390,7 +408,7 @@ int main(int argc, char** argv) {
     generator.seed(seed);
     Robot serial_robot(world_size);
     loc = serial_robot.location();
-    std::cout << "Robot starts at (" << loc[0] << ", " << loc[1] << ", " << loc[2] << ")\n";
+    //std::cout << "Robot starts at (" << loc[0] << ", " << loc[1] << ", " << loc[2] << ")\n";
     init(serial_robot);
     serial_particle_filter(serial_robot);
 
@@ -399,7 +417,7 @@ int main(int argc, char** argv) {
     Robot temp(world_size);
     parallel_robot = temp;
     loc = parallel_robot.location();
-    std::cout << "Robot starts at (" << loc[0] << ", " << loc[1] << ", " << loc[2] << ")\n";
+    //std::cout << "Robot starts at (" << loc[0] << ", " << loc[1] << ", " << loc[2] << ")\n";
     init(parallel_robot);
     parallel(num_threads);
 
