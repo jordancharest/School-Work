@@ -21,7 +21,7 @@
 // SEND errors
 #define EUSRUNKNWN "ERROR Unknown userid\n"
 #define EINVMSGLEN "ERROR Invalid msglen\n"
-#define ELOGINFIRST "ERROR Must LOGIN first\n"
+#define ELOGINFIRST "ERROR Not logged in\n"
 
 // SHARE errors
 #define ESHAREUDP "SHARE not supported because recipient is using UDP\n"
@@ -84,8 +84,8 @@ char* extract_message(char* command, char* buffer, int buf_index, int* error, in
 
     // validate the message length
     if (cml > 994  ||  cml < 1) {
-        *return_msg_len = sizeof EINVMSGLEN;
-        strncpy(return_msg, EINVMSGLEN, *return_msg_len);
+        *return_msg_len = sizeof EINVMSGLEN - 1;
+        strcpy(return_msg, EINVMSGLEN);
         *error = 1;
     }
 
@@ -103,7 +103,7 @@ char* extract_message(char* command, char* buffer, int buf_index, int* error, in
     client_msg[length] = '\n';
     client_msg[length+1] = '\0';
 
-    *full_client_msg_len += cml + length;
+    *full_client_msg_len += cml + 2;
 
     return client_msg;
 }
@@ -136,15 +136,15 @@ void find_recipient(char* command, char* recipient, char* rec_conn_type,  struct
 
             // SHARE is not supported over UDP
             if (strcmp(command, "SHARE") == 0  &&  strcmp(active_users[j].conn_type, "TCP") != 0) {
-                *return_msg_len = sizeof ESHAREUDP;
-                strncpy(return_msg, ESHAREUDP, *return_msg_len);
+                *return_msg_len = sizeof ESHAREUDP - 1;
+                strcpy(return_msg, ESHAREUDP);
                 *error = 1;
                 log_event(strcat("Sent ", ESHAREUDP));
                 break;
             }
 
             // return the client's info
-            *return_msg_len = sizeof ACK;
+            *return_msg_len = sizeof ACK - 1;
             strncpy(return_msg, ACK, *return_msg_len);
             *recipient_socket = active_users[j].socket;
             *recipient_client =  *(active_users[j].client);
@@ -156,10 +156,16 @@ void find_recipient(char* command, char* recipient, char* rec_conn_type,  struct
 
     // if it isn't, tell the sender that the username is unknown
     if (*error != 1) {
-        *return_msg_len = sizeof EUSRUNKNWN;
-        strncpy(return_msg, EUSRUNKNWN, *return_msg_len);
+        *return_msg_len = sizeof EUSRUNKNWN - 1;
+        strcpy(return_msg, EUSRUNKNWN);
         *error = 1;
-        log_event(strcat("Sent ", EUSRUNKNWN));
+        if (master_thread == pthread_self())
+            printf("MAIN: ");
+        else
+            printf("CHILD %u: ", (unsigned int)pthread_self());
+
+        printf("Sent %s", EUSRUNKNWN);
+        fflush(stdout);
     }
 }
 
@@ -168,7 +174,6 @@ void find_recipient(char* command, char* recipient, char* rec_conn_type,  struct
 /* A login attempt was made with a valid username (still might be blocked if a TCP client
     already has the username)                                                                   */
 void login_valid_username(int socket, struct sockaddr_in* client, char* username, char* msg, int* msg_len, int name_length, char* conn_type) {
-    fprintf(stderr, "Username is valid\n");
 
     char sender[21];
     int already_logged_in = 0;
@@ -178,13 +183,17 @@ void login_valid_username(int socket, struct sockaddr_in* client, char* username
     if (already_logged_in) {
         if (strcmp(sender, username) == 0) {
             strcpy(msg, EUSRCONN);
-            *msg_len = sizeof EUSRCONN;
-            //log_event(strcat("Sent ", EUSRCONN));
+            *msg_len = sizeof EUSRCONN - 1;
+            if (master_thread == pthread_self())
+                printf("MAIN: ");
+            else
+                printf("CHILD %u: ", (unsigned int)pthread_self());
+
+            printf("Sent ERROR (Already Connected)\n");
+            fflush(stdout);
             return;
         }
     }
-
-    //fprintf(stderr, "Made it here somehow\n");
 
     int user_already_exists = 0;
     int logout_needed = 0;
@@ -200,7 +209,7 @@ void login_valid_username(int socket, struct sockaddr_in* client, char* username
             // UDP users get preempted, TCP users maintain their connection
             if (same_user == 0  &&  strcmp(active_users[j].conn_type, "TCP") == 0) {
                 strcpy(msg, EUSRCONN);
-                *msg_len = sizeof EUSRCONN;
+                *msg_len = sizeof EUSRCONN - 1;
                 user_already_exists = 1;
 
                 log_event(strcat("Sent ", EUSRCONN));
@@ -239,7 +248,7 @@ void login_valid_username(int socket, struct sockaddr_in* client, char* username
         strcpy(new_user.conn_type, conn_type);
 
         strcpy(msg, ACK);
-        *msg_len = sizeof ACK;
+        *msg_len = sizeof ACK - 1;
 
         // edit the active user list
         pthread_mutex_lock(&user_lock);
@@ -277,25 +286,23 @@ void login_attempt(int socket, struct sockaddr_in* client, char* buffer, char* c
     // validate the userid
     if (buffer[i] != '\n'  &&  !isalnum(buffer[i])) {
         strcpy(msg, EUSRALNUM);
-        msg_len = sizeof EUSRALNUM;
+        msg_len = sizeof EUSRALNUM - 1;
         log_event(strcat("Sent ", EUSRALNUM));
 
     } else if (length == 20) {
         strcpy(msg, EUSRLONG);
-        msg_len = sizeof EUSRLONG;
+        msg_len = sizeof EUSRLONG - 1;
         log_event(strcat("Sent ", EUSRLONG));
 
     } else if (length < 3) {
         strcpy(msg, EUSRSHRT);
-        msg_len = sizeof EUSRSHRT;
+        msg_len = sizeof EUSRSHRT - 1;
         log_event(strcat("Sent ", EUSRSHRT));
 
     // username is valid
     } else {
         login_valid_username(socket, client, username, msg, &msg_len, length, conn_type);
     }
-
-    fprintf(stderr, "Back to login\n");
 
     if (strcmp(conn_type, "UDP") == 0) {
         if ( (sendto( socket, msg, msg_len, 0, (struct sockaddr* )client, (socklen_t) sizeof(*client) ))  < 0 ) {
@@ -314,6 +321,19 @@ void login_attempt(int socket, struct sockaddr_in* client, char* buffer, char* c
 void who(int socket, struct sockaddr_in* client, char* buffer, char* conn_type) {
 
     log_event("Rcvd WHO request\n");
+
+    // figure out who is sending the message
+    char sender[21];
+    int sender_len = determine_sender(client, sender);
+
+    // if sender is unknown, they must LOGIN first
+    if (sender_len == 0) {
+        if ( (sendto( socket, ELOGINFIRST, sizeof ELOGINFIRST - 1, 0, (struct sockaddr* )client, (socklen_t) sizeof(*client) ))  < 0 ) {
+            perror("sendto() failed");
+        }
+
+        return;
+    }
 
 
     char* str = malloc(num_active*20);
@@ -399,7 +419,7 @@ void send_msg(int socket, struct sockaddr_in* client, char* buffer, char* conn_t
 
     // if sender is unknown, they must LOGIN first
     if (sender_len == 0) {
-        if ( (sendto( socket, ELOGINFIRST, sizeof ELOGINFIRST, 0, (struct sockaddr* )client, (socklen_t) sizeof(*client) ))  < 0 ) {
+        if ( (sendto( socket, ELOGINFIRST, sizeof ELOGINFIRST - 1, 0, (struct sockaddr* )client, (socklen_t) sizeof(*client) ))  < 0 ) {
             perror("sendto() failed");
         }
 
@@ -417,7 +437,7 @@ void send_msg(int socket, struct sockaddr_in* client, char* buffer, char* conn_t
     // extract the message from the sender command
     buf_index++;
     char client_msg_len[4];
-    int full_client_msg_len = 9 + sender_len;   // add 9 to account for spaces/newline/null byte and "FROM"
+    int full_client_msg_len = 7 + sender_len;   // add 9 to account for spaces/newline/null byte and "FROM"
 
     char* client_msg = extract_message("SEND", buffer, buf_index, &error, &full_client_msg_len, client_msg_len, &return_msg_len, return_msg);
 
@@ -469,7 +489,7 @@ void broadcast(int socket, struct sockaddr_in* client, char* buffer, char* conn_
 
     // if sender is unknown, they must LOGIN first
     if (sender_len == 0) {
-        if ( (sendto( socket, ELOGINFIRST, sizeof ELOGINFIRST, 0, (struct sockaddr* )client, (socklen_t) sizeof(*client) ))  < 0 ) {
+        if ( (sendto( socket, ELOGINFIRST, sizeof ELOGINFIRST - 1, 0, (struct sockaddr* )client, (socklen_t) sizeof(*client) ))  < 0 ) {
             perror("sendto() failed");
         }
 
@@ -497,7 +517,7 @@ void broadcast(int socket, struct sockaddr_in* client, char* buffer, char* conn_
 
     // if no parsing error occurred then return an acknowledgment message
     if (!error) {
-        return_msg_len = sizeof ACK;
+        return_msg_len = sizeof ACK - 1;
         strncpy(return_msg, ACK, return_msg_len);
     }
 
@@ -509,10 +529,8 @@ void broadcast(int socket, struct sockaddr_in* client, char* buffer, char* conn_
     // broadcast the client message to all active users
     if (!error) {
         for (int i = 0; i < num_active; i++) {
-            if (strcmp(active_users[i].userID, sender) != 0) {
-                if ( (sendto( active_users[i].socket, full_client_msg, full_client_msg_len, 0, (struct sockaddr* )active_users[i].client, (socklen_t) sizeof(*(active_users[i].client)) ))  < 0 ) {
-                    perror("broadcast sendto() failed");
-                }
+            if ( (sendto( active_users[i].socket, full_client_msg, full_client_msg_len, 0, (struct sockaddr* )active_users[i].client, (socklen_t) sizeof(*(active_users[i].client)) ))  < 0 ) {
+                perror("broadcast sendto() failed");
             }
         }
     }
@@ -543,7 +561,7 @@ void share(int socket, struct sockaddr_in* client, char* buffer, char* conn_type
 
     // if sender is unknown, they must LOGIN first
     if (sender_len == 0) {
-        if ( (sendto( socket, ELOGINFIRST, sizeof ELOGINFIRST, 0, (struct sockaddr* )client, (socklen_t) sizeof(*client) ))  < 0 ) {
+        if ( (sendto( socket, ELOGINFIRST, sizeof ELOGINFIRST - 1, 0, (struct sockaddr* )client, (socklen_t) sizeof(*client) ))  < 0 ) {
             perror("sendto() failed");
         }
 
@@ -583,8 +601,8 @@ void share(int socket, struct sockaddr_in* client, char* buffer, char* conn_type
 
     // validate the message length (no max file length)
     if (remaining_bytes < 1) {
-        return_msg_len = sizeof EINVMSGLEN;
-        strncpy(return_msg, EINVMSGLEN, return_msg_len);
+        return_msg_len = sizeof EINVMSGLEN - 1;
+        strcpy(return_msg, EINVMSGLEN);
         error = 1;
         log_event(strcat("Sent ", EINVMSGLEN));
     }
@@ -594,7 +612,7 @@ void share(int socket, struct sockaddr_in* client, char* buffer, char* conn_type
         send(socket, return_msg, return_msg_len, 0);
         return;
     } else
-        send(socket, ACK, sizeof ACK, 0);
+        send(socket, ACK, sizeof ACK - 1, 0);
 
 
     // let the recipient know someone shared a file with them
@@ -608,7 +626,7 @@ void share(int socket, struct sockaddr_in* client, char* buffer, char* conn_type
 
     recipient_msg[recipient_msg_len-1] = '\n';
 
-    if (send(recipient_socket, recipient_msg, recipient_msg_len, 0) != recipient_msg_len) {
+    if (send(recipient_socket, recipient_msg, recipient_msg_len-1, 0) != recipient_msg_len) {
         perror("send() failed");
         exit(EXIT_FAILURE);
     }
@@ -640,7 +658,7 @@ void share(int socket, struct sockaddr_in* client, char* buffer, char* conn_type
             }
 
             // Acknowledge the sender
-            int n = send(socket, ACK, sizeof ACK, 0);
+            int n = send(socket, ACK, sizeof ACK - 1, 0);
             if (n != sizeof ACK) {
                 perror("send() failed");
                 exit(EXIT_FAILURE);
@@ -677,10 +695,10 @@ void parse_command(int socket, struct sockaddr_in* client, char* buffer, char* c
 
         // User logins may sometimes prompt a logout, so move acknowledgment outside logout function to prevent message duplicates
         if (strcmp(conn_type, "UDP") == 0) {
-            if ( ( sendto(socket, ACK, sizeof ACK, 0, (struct sockaddr* )client, (socklen_t) sizeof *client) ) < 0 )
+            if ( ( sendto(socket, ACK, sizeof ACK - 1, 0, (struct sockaddr* )client, (socklen_t) sizeof *client) ) < 0 )
                 perror("sendto() failed");
         } else {
-            if (send(socket, ACK, sizeof ACK, 0) < 0)
+            if (send(socket, ACK, sizeof ACK - 1, 0) < 0)
                 perror("send() failed");
         }
 
