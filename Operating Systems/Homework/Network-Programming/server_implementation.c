@@ -13,26 +13,33 @@
 
 // LOGIN errors
 #define ACK "OK\n"
-#define EUSRLONG "ERROR: userid is too long\n"
-#define EUSRSHRT "ERROR: userid is too short\n"
-#define EUSRALNUM "ERROR: userid must be alphanumeric\n"
-#define EUSRCONN "ERROR: Already connected\n"
+#define EUSRLONG "ERROR userid is too long\n"
+#define EUSRSHRT "ERROR userid is too short\n"
+#define EUSRALNUM "ERROR userid must be alphanumeric\n"
+#define EUSRCONN "ERROR Already connected\n"
 
 // SEND errors
-#define EUSRUNKNWN "ERROR: Unknown userid\n"
-#define EINVMSGLEN "ERROR: Invalid msglen\n"
-#define ELOGINFIRST "ERROR: Must LOGIN first\n"
+#define EUSRUNKNWN "ERROR Unknown userid\n"
+#define EINVMSGLEN "ERROR Invalid msglen\n"
+#define ELOGINFIRST "ERROR Must LOGIN first\n"
 
 // SHARE errors
 #define ESHAREUDP "SHARE not supported because recipient is using UDP\n"
 
 // Command error
-#define EUNKNWNCMD "ERROR: unknown command. Valid commands are:\n LOGIN\n WHO\n LOGOUT\n SEND\n BROADCAST\n SHARE\n"
+#define EUNKNWNCMD "ERROR unknown command. Valid commands are:\n LOGIN\n WHO\n LOGOUT\n SEND\n BROADCAST\n SHARE\n"
 
 unsigned int num_active = 0;
 
+// ALPHABETICAL SORT =============================================================================
+int AB_sort (const void* user1, const void* user2) {
+    char* name1 = ((user_t *)user1)->userID;
+    char* name2 = ((user_t *)user2)->userID;
+    return (strcmp(name1, name2));
+}
+
 // LOG EVENT =====================================================================================
-void log_event(char* out) {
+void log_event(const char* out) {
     if (master_thread == pthread_self())
         printf("MAIN: ");
     else
@@ -118,7 +125,7 @@ void extract_recipient(char* buffer, int* buf_index, char* recipient, int* recip
 // FIND RECIPIENT ================================================================================
 /*  Searches the list of active users by username, returns the socket descriptor and sets the
     sockaddr_in struct pointer to point to the client                                           */
-void find_recipient(char* command, char* recipient, struct sockaddr_in* recipient_client,
+void find_recipient(char* command, char* recipient, char* rec_conn_type,  struct sockaddr_in* recipient_client,
                     int* recipient_socket, char* return_msg, int* return_msg_len, int* error) {
 
     // search for the recipient in the list of active users
@@ -141,6 +148,7 @@ void find_recipient(char* command, char* recipient, struct sockaddr_in* recipien
             strncpy(return_msg, ACK, *return_msg_len);
             *recipient_socket = active_users[j].socket;
             *recipient_client =  *(active_users[j].client);
+            strcpy(rec_conn_type, active_users[j].conn_type);
             return;
         }
     }
@@ -160,13 +168,23 @@ void find_recipient(char* command, char* recipient, struct sockaddr_in* recipien
 /* A login attempt was made with a valid username (still might be blocked if a TCP client
     already has the username)                                                                   */
 void login_valid_username(int socket, struct sockaddr_in* client, char* username, char* msg, int* msg_len, int name_length, char* conn_type) {
-    int already_have_username = 0;
+    fprintf(stderr, "Username is valid\n");
+
     char sender[21];
-    int already_logged_in = determine_sender(client, sender);
+    int already_logged_in = 0;
+    already_logged_in = determine_sender(client, sender);
 
     // if the sender is asking to log in with the same user name, let them know (a different username is valid)
-    if (strcmp(sender, username) == 0)
-        already_have_username = 1;
+    if (already_logged_in) {
+        if (strcmp(sender, username) == 0) {
+            strcpy(msg, EUSRCONN);
+            *msg_len = sizeof EUSRCONN;
+            //log_event(strcat("Sent ", EUSRCONN));
+            return;
+        }
+    }
+
+    //fprintf(stderr, "Made it here somehow\n");
 
     int user_already_exists = 0;
     int logout_needed = 0;
@@ -180,7 +198,7 @@ void login_valid_username(int socket, struct sockaddr_in* client, char* username
             int same_user = strcmp(active_users[j].userID, username);
 
             // UDP users get preempted, TCP users maintain their connection
-            if ((same_user == 0  &&  strcmp(active_users[j].conn_type, "TCP") == 0)  ||  already_have_username) {
+            if (same_user == 0  &&  strcmp(active_users[j].conn_type, "TCP") == 0) {
                 strcpy(msg, EUSRCONN);
                 *msg_len = sizeof EUSRCONN;
                 user_already_exists = 1;
@@ -199,14 +217,14 @@ void login_valid_username(int socket, struct sockaddr_in* client, char* username
 
     // logout procedure moved outside of mutex to avoid deadlock (LOGOUT also needs the user_lock)
     if (logout_needed) {
-        logout(*logout_socket, logout_client);
+        logout(*logout_socket, logout_client, conn_type);
     }
     free(logout_socket);
 
 
     // if this IP address and port already has a different username, log the previous username out
     if (already_logged_in  &&  !user_already_exists  &&  strcmp(sender, username) != 0){
-        logout(socket, client);
+        logout(socket, client, conn_type);
     }
 
     // if the username isn't taken, create the user profile and add it to the active users
@@ -227,6 +245,7 @@ void login_valid_username(int socket, struct sockaddr_in* client, char* username
         pthread_mutex_lock(&user_lock);
             active_users[num_active] = new_user;
             num_active++;
+            qsort(active_users, num_active, sizeof(user_t), AB_sort);
         pthread_mutex_unlock(&user_lock);
     }
 }
@@ -276,16 +295,23 @@ void login_attempt(int socket, struct sockaddr_in* client, char* buffer, char* c
         login_valid_username(socket, client, username, msg, &msg_len, length, conn_type);
     }
 
-    // printf("Sending: %s, %d bytes, to client on port %d\n", msg, msg_len, ntohs(client->sin_port));
-    if ( (sendto( socket, msg, msg_len, 0, (struct sockaddr* )client, (socklen_t) sizeof(*client) ))  < 0 ) {
-        perror("sendto() failed");
+    fprintf(stderr, "Back to login\n");
+
+    if (strcmp(conn_type, "UDP") == 0) {
+        if ( (sendto( socket, msg, msg_len, 0, (struct sockaddr* )client, (socklen_t) sizeof(*client) ))  < 0 ) {
+            perror("sendto() failed");
+        }
+    } else {
+        if (send(socket, msg, msg_len, 0) < 0) {
+            perror("send() failed");
+        }
     }
 }
 
 
 // WHO ===========================================================================================
 /*  Sends a list of active users to the requester (works even if requester is not logged in)    */
-void who(int socket, struct sockaddr_in* client, char* buffer) {
+void who(int socket, struct sockaddr_in* client, char* buffer, char* conn_type) {
 
     log_event("Rcvd WHO request\n");
 
@@ -305,8 +331,14 @@ void who(int socket, struct sockaddr_in* client, char* buffer) {
     }
 
     // then send it
-    if ( (sendto( socket, str, msg_len, 0, (struct sockaddr* )client, (socklen_t) sizeof(*client) ))  < 0 ) {
-        perror("sendto() failed");
+    if (strcmp(conn_type, "UDP") == 0) {
+        if ( (sendto( socket, str, msg_len, 0, (struct sockaddr* )client, (socklen_t) sizeof(*client) ))  < 0 ) {
+            perror("sendto() failed");
+        }
+    } else {
+        if (send(socket, str, msg_len, 0) < 0) {
+            perror("send() failed");
+        }
     }
 
     free(str);
@@ -314,7 +346,7 @@ void who(int socket, struct sockaddr_in* client, char* buffer) {
 
 
 // LOGOUT ========================================================================================
-void logout(int socket, struct sockaddr_in* client) {
+void logout(int socket, struct sockaddr_in* client, char* conn_type) {
 
     log_event("Rcvd LOGOUT request\n");
 
@@ -342,7 +374,7 @@ void logout(int socket, struct sockaddr_in* client) {
 
 
 // SEND MESSAGE ==================================================================================
-void send_msg(int socket, struct sockaddr_in* client, char* buffer) {
+void send_msg(int socket, struct sockaddr_in* client, char* buffer, char* conn_type) {
 
     int buf_index = 5;
     int return_msg_len;
@@ -378,7 +410,8 @@ void send_msg(int socket, struct sockaddr_in* client, char* buffer) {
     // find the recipient in the list of active users
     int recipient_socket;
     struct sockaddr_in* recipient_client = malloc(sizeof *recipient_client);
-    find_recipient("SEND", recipient, recipient_client, &recipient_socket, return_msg, &return_msg_len, &error);
+    char rec_conn_type[4];
+    find_recipient("SEND", recipient, rec_conn_type, recipient_client, &recipient_socket, return_msg, &return_msg_len, &error);
 
 
     // extract the message from the sender command
@@ -399,14 +432,23 @@ void send_msg(int socket, struct sockaddr_in* client, char* buffer) {
     strcat(full_client_msg, client_msg);
 
     // send acknowledgement/error message to the sender
-    if ( (sendto( socket, return_msg, return_msg_len, 0, (struct sockaddr* )client, (socklen_t) sizeof(*client) ))  < 0 ) {
-        perror("sendto() failed");
+    if (strcmp(rec_conn_type, "UDP") == 0) {
+        if ( ( sendto(socket, return_msg, return_msg_len, 0, (struct sockaddr* )client, (socklen_t) sizeof *client) ) < 0 )
+                perror("sendto() failed");
+    } else {
+        if (send(socket, return_msg, return_msg_len, 0) < 0)
+            perror("send() failed");
     }
+
 
     // send the client message to the recipient
     if (!error) {
-        if ( (sendto( recipient_socket, full_client_msg, full_client_msg_len, 0, (struct sockaddr* )recipient_client, (socklen_t) sizeof(*(active_users[recipient_index].client)) ))  < 0 ) {
-            perror("sendto() failed");
+        if (strcmp(rec_conn_type, "UDP") == 0) {
+            if ( ( sendto(recipient_socket, full_client_msg, full_client_msg_len, 0, (struct sockaddr* )client, (socklen_t) sizeof *client) ) < 0 )
+                perror("sendto() failed");
+        } else {
+            if (send(recipient_socket, full_client_msg, full_client_msg_len, 0) < 0)
+                perror("send() failed");
         }
     }
 
@@ -417,7 +459,7 @@ void send_msg(int socket, struct sockaddr_in* client, char* buffer) {
 
 
 // BROADCAST =====================================================================================
-void broadcast(int socket, struct sockaddr_in* client, char* buffer) {
+void broadcast(int socket, struct sockaddr_in* client, char* buffer, char* conn_type) {
 
     log_event("Rcvd BROADCAST request\n");
 
@@ -520,7 +562,8 @@ void share(int socket, struct sockaddr_in* client, char* buffer, char* conn_type
     struct sockaddr_in* recipient_client = malloc(sizeof *recipient_client);
     int return_msg_len;
     char return_msg[64];
-    find_recipient("SHARE", recipient, recipient_client, &recipient_socket, return_msg, &return_msg_len, &error);
+    char rec_conn_type[4];
+    find_recipient("SHARE", recipient, rec_conn_type, recipient_client, &recipient_socket, return_msg, &return_msg_len, &error);
 
     // don't need the client to send over TCP
     free(recipient_client);
@@ -627,20 +670,25 @@ void parse_command(int socket, struct sockaddr_in* client, char* buffer, char* c
         login_attempt(socket, client, buffer, conn_type);
 
     } else if (strcmp(command, "WHO") == 0) {
-        who(socket, client, buffer);
+        who(socket, client, buffer, conn_type);
 
     } else if (strcmp(command, "LOGOUT") == 0) {
-        logout(socket, client);
+        logout(socket, client, conn_type);
 
         // User logins may sometimes prompt a logout, so move acknowledgment outside logout function to prevent message duplicates
-        if ( ( sendto(socket, ACK, sizeof ACK, 0, (struct sockaddr* )client, (socklen_t) sizeof *client) ) < 0 )
-            perror("sendto() failed");
+        if (strcmp(conn_type, "UDP") == 0) {
+            if ( ( sendto(socket, ACK, sizeof ACK, 0, (struct sockaddr* )client, (socklen_t) sizeof *client) ) < 0 )
+                perror("sendto() failed");
+        } else {
+            if (send(socket, ACK, sizeof ACK, 0) < 0)
+                perror("send() failed");
+        }
 
     } else if (strcmp(command, "SEND") == 0) {
-        send_msg(socket, client, buffer);
+        send_msg(socket, client, buffer, conn_type);
 
     } else if (strcmp(command, "BROADCAST") == 0) {
-        broadcast(socket, client, buffer);
+        broadcast(socket, client, buffer, conn_type);
 
     } else if (strcmp(command, "SHARE") == 0) {
         share(socket, client, buffer, conn_type);

@@ -131,7 +131,7 @@ void* handle_TCP_connection (void* args) {
             // client closed the connection
             } else if (n_bytes == 0) {
                 printf("Client closed the connection...closing socket\n");
-                logout(socket, client);
+                logout(socket, client, "TCP");
                 break;
 
             } else {
@@ -142,8 +142,7 @@ void* handle_TCP_connection (void* args) {
         }
     }
 
-
-    return NULL;
+    pthread_exit(NULL);
 }
 
 // MAIN ==========================================================================================

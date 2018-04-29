@@ -36,10 +36,10 @@ extern pthread_mutex_t user_lock;
 
 // FUNCTION PROTOTYPES ===========================================================================
 void login_attempt(int socket, struct sockaddr_in* client, char* buffer, char* conn_type);
-void who(int socket, struct sockaddr_in* client, char* buffer);
-void logout(int socket, struct sockaddr_in* client);
-void send_msg(int socket, struct sockaddr_in* client, char* buffer);
-void broadcast(int socket, struct sockaddr_in* client, char* buffer);
+void who(int socket, struct sockaddr_in* client, char* buffer, char* conn_type);
+void logout(int socket, struct sockaddr_in* client, char* conn_type);
+void send_msg(int socket, struct sockaddr_in* client, char* buffer, char* conn_type);
+void broadcast(int socket, struct sockaddr_in* client, char* buffer, char* conn_type);
 void share(int socket, struct sockaddr_in* client, char* buffer, char* conn_type);
 void parse_command(int UDP_socket, struct sockaddr_in* client, char* buffer, char* conn_type);
 
