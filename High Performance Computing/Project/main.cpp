@@ -9,9 +9,9 @@
 #include "robot.hpp"
 
 // GLOBAL - for access by all threads
-static int N = 2048;           // number of particles
-static int world_size = N/2;   // toroidal world
-static int L = 12;              // number of landmarks
+static const int N = 512;           // number of particles
+static int WORLD_SIZE = N/2;   // toroidal world
+static const int L = 12;              // number of landmarks
 static const double SENSOR_NOISE = 3.0;
 static const double MOVE_NOISE = 0.08;
 static const double ALLOWABLE = 0.75 * SENSOR_NOISE;
@@ -20,7 +20,7 @@ std::atomic<double> p_mean_error(100.0);
 
 static double forward_cmd;
 static double turn_cmd;
-static Robot parallel_robot(world_size);
+static Robot parallel_robot(WORLD_SIZE);
 
 std::vector<Point> landmarks(L);
 static std::vector<Robot> particles(N);
@@ -44,8 +44,8 @@ void parallel_evaluate(const auto &robot, int particle_index, int particles_per_
     double dx, dy;
 
     for (int i = particle_index; i < particle_index + particles_per_thread; i++) {
-        dx = modulo((particles[i].x() - robot.x() + (world_size/2.0)), world_size) - (world_size/2.0);
-        dy = modulo((particles[i].y() - robot.y() + (world_size/2.0)), world_size) - (world_size/2.0);
+        dx = modulo((particles[i].x() - robot.x() + (WORLD_SIZE/2.0)), WORLD_SIZE) - (WORLD_SIZE/2.0);
+        dy = modulo((particles[i].y() - robot.y() + (WORLD_SIZE/2.0)), WORLD_SIZE) - (WORLD_SIZE/2.0);
         sum += sqrt(dx*dx + dy*dy);
     }
 
@@ -60,8 +60,8 @@ void evaluate(double &mean_error, const auto &robot) {
     double dx, dy;
 
     for (auto &particle : particles) {
-        dx = modulo((particle.x() - robot.x() + (world_size/2.0)), world_size) - (world_size/2.0);
-        dy = modulo((particle.y() - robot.y() + (world_size/2.0)), world_size) - (world_size/2.0);
+        dx = modulo((particle.x() - robot.x() + (WORLD_SIZE/2.0)), WORLD_SIZE) - (WORLD_SIZE/2.0);
+        dy = modulo((particle.y() - robot.y() + (WORLD_SIZE/2.0)), WORLD_SIZE) - (WORLD_SIZE/2.0);
         sum += sqrt(dx*dx + dy*dy);
     }
 
@@ -282,8 +282,8 @@ void init(Robot &robot) {
     // Initialize L random landmarks
     Point landmark;
     for (int i = 0; i < L; i++) {
-        landmark.x = uniform(generator) * world_size;
-        landmark.y = uniform(generator) * world_size;
+        landmark.x = uniform(generator) * WORLD_SIZE;
+        landmark.y = uniform(generator) * WORLD_SIZE;
         landmarks[i] = landmark;
     }
 
@@ -292,7 +292,7 @@ void init(Robot &robot) {
 
     // Initialize N random particles - particle locations are randomly generated in the constructor
     for (int i = 0; i < N; i++) {
-        Robot particle(world_size);
+        Robot particle(WORLD_SIZE);
         particle.setNoise(MOVE_NOISE, MOVE_NOISE, SENSOR_NOISE);
         particles[i] = particle;
     }
@@ -302,9 +302,9 @@ void init(Robot &robot) {
 // MAIN ==========================================================================================
 int main(int argc, char** argv) {
 
-    if (argc != 4) {
+    if (argc < 2  || argc > 3) {
         std::cerr << "ERROR: invalid argument(s)\n";
-        std::cerr << "USAGE: " << argv[0] << " <num-threads> <random-seed> <num-particles>\n";
+        std::cerr << "USAGE: " << argv[0] << " <num-threads> <random-seed>\n";
         exit(EXIT_FAILURE);
     }
 
@@ -319,26 +319,21 @@ int main(int argc, char** argv) {
 	pthread_barrier_init(&barrier, NULL, num_threads);
 
     // seed for random particle generation
-    int seed = atoi(argv[2]);
-
-    // number of particles
-    N = atoi(argv[3]);
-    if (N % 64 != 0) {
-        std::cerr << "ERROR: invalid particle count\n";
-        std::cerr << "Make divisible by 64 for best results\n";
-        exit(EXIT_FAILURE);
-    }
-
+    int seed;
+    if (argc == 3)
+        seed = atoi(argv[2]);
+    else
+        seed = time(0);
 
     // Initialize the robot to a random location and define noise levels; start the serial simulation
     generator.seed(seed);
-    Robot serial_robot(world_size);
+    Robot serial_robot(WORLD_SIZE);
     init(serial_robot);
     serial_particle_filter(serial_robot);
 
     // reset the world to the exact same configuration and rerun in parallel
     generator.seed(seed);
-    Robot temp(world_size);
+    Robot temp(WORLD_SIZE);
     parallel_robot = temp;
     init(parallel_robot);
     parallel(num_threads);
