@@ -617,16 +617,16 @@ void share(int socket, struct sockaddr_in* client, char* buffer, char* conn_type
 
     // let the recipient know someone shared a file with them
     char recipient_msg[32];
-    int recipient_msg_len = 8 + sender_len + length;
+    int recipient_msg_len = 9 + sender_len + length;
 
-    strcpy(recipient_msg, "FROM ");
+    strcpy(recipient_msg, "SHARE ");
     strcat(recipient_msg, sender);
     strcat(recipient_msg, " ");
     strcat(recipient_msg, client_msg_len);
 
     recipient_msg[recipient_msg_len-1] = '\n';
 
-    if (send(recipient_socket, recipient_msg, recipient_msg_len-1, 0) != recipient_msg_len) {
+    if (send(recipient_socket, recipient_msg, recipient_msg_len-1, 0) != recipient_msg_len-1) {
         perror("send() failed");
         exit(EXIT_FAILURE);
     }
@@ -659,7 +659,7 @@ void share(int socket, struct sockaddr_in* client, char* buffer, char* conn_type
 
             // Acknowledge the sender
             int n = send(socket, ACK, sizeof ACK - 1, 0);
-            if (n != sizeof ACK) {
+            if (n != sizeof ACK-1) {
                 perror("send() failed");
                 exit(EXIT_FAILURE);
             }

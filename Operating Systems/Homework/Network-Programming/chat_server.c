@@ -130,7 +130,7 @@ void* handle_TCP_connection (void* args) {
 
             // client closed the connection
             } else if (n_bytes == 0) {
-                printf("Client closed the connection...closing socket\n");
+                printf("CHILD %u: Client disconnected\n", (unsigned int)pthread_self());
                 logout(socket, client, "TCP");
                 break;
 
