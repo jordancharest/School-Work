@@ -628,7 +628,6 @@ void share(int socket, struct sockaddr_in* client, char* buffer, char* conn_type
 
     // receive and send the file in 1024 byte chunks
     char file_buffer[1024];     // received messages are not expected to be characters (i.e. readable text)
-    int recv_bytes = 0;
     while (remaining_bytes > 1) {
 
         int n_recv = recv(socket, file_buffer, MAX_BUFFER, 0 );
