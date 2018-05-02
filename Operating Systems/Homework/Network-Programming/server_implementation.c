@@ -87,6 +87,7 @@ char* extract_message(char* command, char* buffer, int buf_index, int* error, in
         *return_msg_len = sizeof EINVMSGLEN - 1;
         strcpy(return_msg, EINVMSGLEN);
         *error = 1;
+        log_event("Sent ERROR (Invalid msglen)\n");
     }
 
 
@@ -159,13 +160,7 @@ void find_recipient(char* command, char* recipient, char* rec_conn_type,  struct
         *return_msg_len = sizeof EUSRUNKNWN - 1;
         strcpy(return_msg, EUSRUNKNWN);
         *error = 1;
-        if (master_thread == pthread_self())
-            printf("MAIN: ");
-        else
-            printf("CHILD %u: ", (unsigned int)pthread_self());
-
-        printf("Sent %s", EUSRUNKNWN);
-        fflush(stdout);
+        log_event("Sent ERROR (Unknown userid)\n");
     }
 }
 
@@ -189,7 +184,7 @@ void login_valid_username(int socket, struct sockaddr_in* client, char* username
             else
                 printf("CHILD %u: ", (unsigned int)pthread_self());
 
-            printf("Sent ERROR (Already Connected)\n");
+            printf("Sent ERROR (Already connected)\n");
             fflush(stdout);
             return;
         }
@@ -332,6 +327,7 @@ void who(int socket, struct sockaddr_in* client, char* buffer, char* conn_type) 
             perror("sendto() failed");
         }
 
+        log_event("Sent ERROR (Not logged in)\n");
         return;
     }
 
@@ -367,9 +363,6 @@ void who(int socket, struct sockaddr_in* client, char* buffer, char* conn_type) 
 
 // LOGOUT ========================================================================================
 void logout(int socket, struct sockaddr_in* client, char* conn_type) {
-
-    log_event("Rcvd LOGOUT request\n");
-
 
     user_t* temp = calloc(MAX_CLIENTS, sizeof *temp);
 
@@ -423,6 +416,7 @@ void send_msg(int socket, struct sockaddr_in* client, char* buffer, char* conn_t
             perror("sendto() failed");
         }
 
+        log_event("Sent ERROR (Not logged in)\n");
         return;
     }
 
@@ -502,7 +496,7 @@ void broadcast(int socket, struct sockaddr_in* client, char* buffer, char* conn_
     char client_msg_len[4];
     char return_msg[64];
     int buf_index = 10;
-    int full_client_msg_len = 9 + sender_len;   // add 9 to account for spaces/newline/null byte and "FROM"
+    int full_client_msg_len = 7 + sender_len;   // add 7 to account for spaces and "FROM"
 
     char* client_msg = extract_message("SEND", buffer, buf_index, &error, &full_client_msg_len, client_msg_len, &return_msg_len, return_msg);
 
@@ -617,7 +611,7 @@ void share(int socket, struct sockaddr_in* client, char* buffer, char* conn_type
 
     // let the recipient know someone shared a file with them
     char recipient_msg[32];
-    int recipient_msg_len = 9 + sender_len + length;
+    int recipient_msg_len = 8 + sender_len + length;
 
     strcpy(recipient_msg, "SHARE ");
     strcat(recipient_msg, sender);
@@ -634,9 +628,9 @@ void share(int socket, struct sockaddr_in* client, char* buffer, char* conn_type
 
     // receive and send the file in 1024 byte chunks
     char file_buffer[1024];     // received messages are not expected to be characters (i.e. readable text)
-    while (remaining_bytes > 0) {
+    int recv_bytes = 0;
+    while (remaining_bytes > 1) {
 
-        // recv bytes from sender
         int n_recv = recv(socket, file_buffer, MAX_BUFFER, 0 );
         if (n_recv < 0) {
             perror("recv() failed");
@@ -691,6 +685,7 @@ void parse_command(int socket, struct sockaddr_in* client, char* buffer, char* c
         who(socket, client, buffer, conn_type);
 
     } else if (strcmp(command, "LOGOUT") == 0) {
+        log_event("Rcvd LOGOUT request\n");
         logout(socket, client, conn_type);
 
         // User logins may sometimes prompt a logout, so move acknowledgment outside logout function to prevent message duplicates
