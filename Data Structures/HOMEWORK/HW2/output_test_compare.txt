@@ -1,0 +1,41 @@
+DECATHELETE POINTS                       POLE_VAULT  JAVELIN_THROW    1500_METERS       SHOT_PUT      HIGH_JUMP     400_METERS   110M_HURDLES   DISCUS_THROW     100_METERS      LONG_JUMP         TOTALS
+Bryan            Clay            USA            910            904            522            868            794            865            984            950            989           1005           8791
+Andrei           Krauchanka      BLR            910            741            761            752            906            943            948            758            870            962           8551
+Leonel           Suarez          CUB            819            950            750            758            850            913            955            756            883            893           8527
+Alexander        Pogorelov       RUS            910            798            551            884            878            773            915            871            845            903           8328
+Romain           Barras          FRA            910            819            749            816            767            837            948            770            804            833           8253
+Roman            Sebrle          CZE            849            797            621            776            906            836            885            777            814            980           8241
+Oleksiy          Kasyanov        UKR            702            612            752            799            767            924            927            837            968            950           8238
+Andre            Niklaus         GER            972            741            726            681            850            831            927            775            834            883           8220
+Maurice          Smith           JAM            790            611            734            795            794            911            964            889            894            823           8205
+Michael          Schrader        GER            849            742            766            708            794            886            885            673            906            985           8194
+Mikk             Pahapill        EST            849            845            637            750            906            774            910            857            827            823           8178
+Aleksey          Drozdov         RUS            941            777            672            867            822            744            789            817            856            869           8154
+Andres           Raja            EST            849            846            621            777            767            862            967            661            885            883           8118
+Eugene           Martineau       NED            819            911            693            715            794            815            882            748            819            859           8055
+Yordani          Garcia          CUB            819            822            557            840            767            830            987            598            942            830           7992
+Mikalai          Shubianok       BLR            790            769            692            782            794            814            908            783            793            781           7906
+Aliaksandr       Parkhomenka     BLR            819            807            648            820            740            782            842            772            797            811           7838
+Qi               Haifeng         CHN            702            784            685            692            740            843            899            797            827            866           7835
+Massimo          Bertocchi       CAN            819            520            666            734            714            875            934            765            861            826           7714
+Jangy            Addy            LBR            673            626            491            784            740            885            935            711            915            905           7665
+Daniel           Awde            GBR            880            636            650            608            610            950            887            606            847            842           7516
+Hadi             Sepehrzad       IRN            617            582            522            852            714            780            894            877            878            767           7483
+Damjan           Sitar           SVN            617            548            697            631            850            810            846            649            814            874           7336
+Slaven           Dizdarevic      SVK            617            494            610            727            767            724            777            662            825            818           7021
+David            Gomez           ESP                           771            740            703            636            849            897            668            834            778           6876
+Mikko            Halvari         FIN                           665            449            711            740            787            705            823            821            785           6486
+Trey             Hardee          USA                                                         697            850            921            949            737            970            990           6114
+Gonzalo          Barroilhet      CHL                                                         681            740            729            941            789            789            833           5502
+Janis            Karlivans       LAT                                                         780            661            742            816            757            782            876           5414
+Alexey           Sysoev          RUS                                                         816            906            782                                          854            760           4118
+Carlos           Chinin          BRA                                                                        794            851                                          863            799           3307
+Pavel            Andreev         UZB                                                         738            794                                                         759            725           3016
+Frederic         Xhonneux        BEL                                                         728            714                                                         771            799           3012
+Arthur           Abele           GER                                                         701            714                                                         883            691           2989
+Hans             Van_Alphen      BEL                                                         781            661                                                         799            709           2950
+Victor           Covalenco       MDA                                                         694            636                                                         677            697           2704
+Tom              Pappas          USA                                                                                                                                    834            913           1747
+Vitaliy          Smirnov         UZB                                                         698                                                                        740                          1438
+Dmitriy          Karpov          KAZ                                                                                                                                    685                           685
+Attila           Zsivoczky       HUN                                                                                                                                    679                           679

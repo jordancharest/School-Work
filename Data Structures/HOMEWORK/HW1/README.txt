@@ -1,0 +1,25 @@
+HOMEWORK 1: ASCII FONT ART
+
+
+NAME:  < Jordan Charest >
+
+
+
+COLLABORATORS AND OTHER RESOURCES:
+
+< Data Structures Lecture Notes >
+
+
+
+
+ESTIMATE OF # OF HOURS SPENT ON THIS ASSIGNMENT:  < 3 >
+
+
+
+
+EXTRA CREDIT: N/A
+
+
+
+
+MISC. COMMENTS TO GRADER:
