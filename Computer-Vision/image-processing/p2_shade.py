@@ -54,18 +54,25 @@ if __name__ == "__main__":
     in_img, out_img, direction = arg_parse()
     img = cv2.imread(in_img, cv2.IMREAD_COLOR)
     
-    shader = generate_shader(img, direction)
-    print(img[:,:,0].shape)
-    print(shader.shape)
-    print(shader)
-    
+    shader = generate_shader(img, direction)    
     shaded = np.zeros(img.shape)
+    
     # broadcast the shader to all color channels of the original image
     for i in range(img.shape[-1]):
         shaded[:,:,i] = img[:,:,i] * shader
     
-    print(shaded.shape)
-    
+    # cocatenate the original and shaded image and write to disk    
     result = np.hstack((img, shaded))
     cv2.imwrite(out_img, result)
+    
+    # Output
+    print("({0}, {1}) {2:.3f}".format(0, 0, shader[0,0]))
+    print("({0}, {1}) {2:.3f}".format(0, img.shape[1]//2, shader[0, img.shape[1]//2]))
+    print("({0}, {1}) {2:.3f}".format(0, img.shape[1]-1, shader[0, img.shape[1]-1]))
+    print("({0}, {1}) {2:.3f}".format(img.shape[0]//2, 0, shader[img.shape[0]//2, 0]))
+    print("({0}, {1}) {2:.3f}".format(img.shape[0]//2, img.shape[1]//2, shader[img.shape[0]//2, img.shape[1]//2]))
+    print("({0}, {1}) {2:.3f}".format(img.shape[0]//2, img.shape[1]-1, shader[img.shape[0]//2, img.shape[1]-1]))
+    print("({0}, {1}) {2:.3f}".format(img.shape[0]-1, 0, shader[img.shape[0]-1, 0]))
+    print("({0}, {1}) {2:.3f}".format(img.shape[0]-1, img.shape[1]//2, shader[img.shape[0]-1, img.shape[1]//2]))
+    print("({0}, {1}) {2:.3f}".format(img.shape[0]-1, img.shape[1]-1, shader[img.shape[0]-1, img.shape[1]-1]))
     
