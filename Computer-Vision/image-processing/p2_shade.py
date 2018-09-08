@@ -61,7 +61,7 @@ if __name__ == "__main__":
     for i in range(img.shape[-1]):
         shaded[:,:,i] = img[:,:,i] * shader
     
-    # cocatenate the original and shaded image and write to disk    
+    # concatenate the original and shaded image and write to disk    
     result = np.hstack((img, shaded))
     cv2.imwrite(out_img, result)
     
