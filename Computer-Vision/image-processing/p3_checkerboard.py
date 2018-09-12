@@ -166,7 +166,7 @@ if __name__ == "__main__":
     elif len(img_list) == 2:
         filename1 = os.path.basename(img_list[0])
         filename2 = os.path.basename(img_list[1])
-        print("Exactly two images: {0} and {1}. Creating a checkerboard from these.".format(filename1, filename2))
+        print("Exactly two images: {0} and {1}. Creating checkerboard from these.".format(filename1, filename2))
         img1 = cv2.imread(img_list[0], cv2.IMREAD_COLOR)
         img2 = cv2.imread(img_list[1], cv2.IMREAD_COLOR)
         img1, img2 = crop_and_resize([img1,img2], size)
