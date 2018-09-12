@@ -3,7 +3,7 @@ import ntpath
 import numpy as np
 import cv2
 
-from scipy import ndimage
+# from scipy import ndimage
 
 
 # parse command line arguments ------------------------------------------------
@@ -58,7 +58,7 @@ if __name__ == "__main__":
     # make the binary image
     thresh = np.median(downsized)
     retval, binary = cv2.threshold(downsized, thresh, 255, cv2.THRESH_BINARY)
-    print("Binary Threshold: {0:.2f}".format(thresh))
+    print("Binary threshold: {0:.2f}".format(thresh))
     
     # convert gray to int then upsample gray and binary
     downsized = downsized.astype(np.int)
