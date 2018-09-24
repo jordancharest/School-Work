@@ -1,0 +1,6 @@
+Copy starts at (0, 0) image shape (420, 334, 3)
+Copy starts at (105, 334) image shape (210, 167, 3)
+Copy starts at (157, 501) image shape (105, 83, 3)
+Copy starts at (184, 584) image shape (52, 41, 3)
+Copy starts at (197, 625) image shape (26, 20, 3)
+Final shape (420, 645, 3)
