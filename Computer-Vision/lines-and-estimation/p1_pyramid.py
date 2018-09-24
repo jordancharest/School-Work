@@ -1,4 +1,5 @@
 from sys import argv
+from math import ceil
 
 import numpy as np
 import cv2
@@ -32,11 +33,13 @@ if __name__ == "__main__":
     row = 0
     col = 0
     while img.shape[0] >= 20 and img.shape[1] >= 20:
+        print("Copy starts at ({0}, {1}) image shape {2}".format(row, col, img.shape))
         out_img[row:row+img.shape[0], col:col+img.shape[1], :] = img
 
         #  resize image and adjust the row and column
         col += img.shape[1]
         img = cv2.resize(img, (img.shape[1]//2, img.shape[0]//2))
-        row = out_img.shape[0]//2 - img.shape[0]//2
+        row = out_img.shape[0]//2 - ceil(img.shape[0]/2)
 
+    print("Final shape", out_img.shape)
     cv2.imwrite(out_img_name, out_img)
