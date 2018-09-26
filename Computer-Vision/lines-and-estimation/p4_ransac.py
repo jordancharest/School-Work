@@ -54,12 +54,11 @@ if __name__  == "__main__":
 
     N = len(pts)
     k_max = 0
-    k = 0
     rho_model = 0
     theta_model = 0
     best_i, best_j = 0,1
 
-    # generate n line samples and find which one is best
+    # generate line samples and find which one is best
     for num in range(samples):
         i,j = np.random.randint(0, N, 2)
 
@@ -95,12 +94,6 @@ if __name__  == "__main__":
                 print("line ({0:.3f},{1:.3f},{2:.3f})".format(cos(theta), sin(theta), -rho))
             print("inliers", k)
             print()
-
-            # plt.scatter(x, y)
-            # plt.scatter(pts[best_i, 0], pts[best_i, 1], color='r')
-            # plt.scatter(pts[best_j, 0], pts[best_j, 1], color='r')
-            # plt.plot(x, (rho_model - x*cos(theta_model))/sin(theta_model))
-            # plt.show()
 
     # calculate inlier and outlier average distances
     distances = abs(x*cos(theta_model) + y*sin(theta_model) - rho_model)
