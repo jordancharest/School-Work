@@ -1,7 +1,9 @@
 import sys
 from select import select
 
-import UdpServer as udp
+
+from UdpServer import UdpServer
+from event import event
 
 # -----------------------------------------------------------------------------
 def read_known_hosts():
@@ -19,8 +21,11 @@ def read_known_hosts():
         if file.mode == "r":
             lines = file.readlines()
             for line in lines:
-                host, port = line.split()
-                hosts.append((host, port))
+                ID, port = line.split()
+                hosts.append((ID, port))
+                if len(ID) != 25 or not ID.isalnum():
+                    print("IDs must be 25 character alphanumeric string")
+                    exit()
 
         # ensure our site ID is in the group of known hosts
         for host in hosts:
@@ -31,13 +36,28 @@ def read_known_hosts():
             print("Site ID must be contained in knownhosts_udp.txt")
             exit()
 
+        # build a matrix clock that includes all hosts; each clock gets a
+        # vector of zeros with a length of len(hosts)
+        # also build a calendar and leave it empty
+        clock = {}
+        calendar = {}
+        for host in hosts:
+            clock[host[0]] = [0] * len(hosts)
+            calendar[host[0]] = []
 
     else:
         print("Invalid Argument(s)")
-        print("USAGE: {0} <site-id>".format(argv[0]))
+        print("USAGE: {0} <site-id>".format(sys.argv[0]))
         exit()
 
-    return site_id, int(port), hosts
+    return site_id, int(port), hosts, clock, calendar
+
+# -----------------------------------------------------------------------------
+def print_matrix_clock(T):
+    print("\nClock:")
+    for ID, clock in T.items():
+        print(ID, clock)
+    print()
 
 # -----------------------------------------------------------------------------
 def parse_messaage(data, address):
@@ -84,13 +104,15 @@ def log():
 
 # =============================================================================
 if __name__ == "__main__":
-    site_id, port, hosts = read_known_hosts()
+    site_id, port, hosts, clock = read_known_hosts()
+    print_matrix_clock(clock)
+    view(calendar)
 
     # both server and poll for user input are non-blocking
-    server = udp.UdpServer(site_id, port)
+    server = UdpServer("127.0.0.1", port)
     timeout = 0
-    print("Enter a command:")
 
+    print("Enter a command:")
     while True:
         # attempt to receive any message
         data, address = server.receive()
