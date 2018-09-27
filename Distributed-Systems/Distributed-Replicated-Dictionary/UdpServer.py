@@ -8,16 +8,26 @@ class UdpServer:
         self.host = host
         self.port = port
         self.sock.bind((self.host, self.port))
+        self.sock.setblocking(0)
 
-    def send():
+    def send(self):
         pass
 
-    def receive():
-        pass
+    def receive(self, size=1024):
+        """
+        Non-blocking receive because I don't want to do multi-threading in
+        Python. Not sure how well it will work. Throws socket.error if there
+        are no messages in the network buffer
+        """
+        try:
+            data, address = self.sock.recvfrom(size)
+        except socket.error:
+            return None, None
+        else:
+            return data, address
 
 
-
-
+# Ignore
 if __name__ == "__main__":
     # run tests on the UDP server object
     host = "192.168.0.1"
