@@ -1,5 +1,5 @@
 class event:
-    def __init__(self, day, time, name, participants)
+    def __init__(self, name, day, start, end, participants):
         self.day = day
         self.start = start
         self.end = end
@@ -14,5 +14,5 @@ class event:
     def __repr__(self):
         result = self.name + " " + self.day + " " + self.start + " " + self.end
         for p in self.participants:
-            result += p + ","
+            result += " " + p + ","
         return result[:-1]

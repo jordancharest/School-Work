@@ -5,6 +5,19 @@ from select import select
 from UdpServer import UdpServer
 from event import event
 
+
+"""
+TODO:
+    - Need to assign numbers to each site (0, 1, 2, 3, ...) to index into matrix clock
+    - choose and build log data structure
+    - schedule()
+    - cancel()
+    - view()
+    - myview()
+    - log()
+    - insert()
+"""
+
 # -----------------------------------------------------------------------------
 def read_known_hosts():
     """
@@ -36,21 +49,23 @@ def read_known_hosts():
             print("Site ID must be contained in knownhosts_udp.txt")
             exit()
 
-        # build a matrix clock that includes all hosts; each clock gets a
-        # vector of zeros with a length of len(hosts)
-        # also build a calendar and leave it empty
+        # build a matrix clock that includes all hosts,
+        # an empty calendar, and assign sequential IDs
+        # to each site
         clock = {}
         calendar = {}
-        for host in hosts:
+        index = {}
+        for i,host in enumerate(hosts):
             clock[host[0]] = [0] * len(hosts)
             calendar[host[0]] = []
+            index[host[0]] = i
 
     else:
         print("Invalid Argument(s)")
         print("USAGE: {0} <site-id>".format(sys.argv[0]))
         exit()
 
-    return site_id, int(port), hosts, clock, calendar
+    return site_id, int(port), hosts, clock, calendar, index
 
 # -----------------------------------------------------------------------------
 def print_matrix_clock(T):
@@ -64,7 +79,7 @@ def parse_messaage(data, address):
     print("Received message")
 
 # -----------------------------------------------------------------------------
-def parse_command(user_input):
+def parse_command(user_input, calendar, clock, index):
     user_input = user_input.split()
     command = user_input[0]
     args = user_input[1:]
@@ -83,20 +98,27 @@ def parse_command(user_input):
         print("ERROR: Invalid command.")
 
 # -----------------------------------------------------------------------------
-def schedule(args):
+def schedule(args, calendar, site_id):
     print("User requested SCHEDULE")
+    name, day, start, end, participants = args
+    e = event(name, day, start, end, participants)
+
+    # add the meeting and keep the calendar sorted
+    calendar[site_id].append(e)
+    calendar[site_id].sort()
 
 # -----------------------------------------------------------------------------
 def cancel(meeting):
     print("User requested CANCEL")
 
 # -----------------------------------------------------------------------------
-def view():
+def view(calendar):
     print("User requested VIEW")
 
 # -----------------------------------------------------------------------------
-def myview():
+def myview(calendar, site_ID):
     print("User requested MYVIEW")
+    print(calendar[site_id])
 
 # -----------------------------------------------------------------------------
 def log():
@@ -104,9 +126,13 @@ def log():
 
 # =============================================================================
 if __name__ == "__main__":
-    site_id, port, hosts, clock = read_known_hosts()
+    site_id, port, hosts, clock, calendar, index = read_known_hosts()
     print_matrix_clock(clock)
-    view(calendar)
+
+    # test by adding an event to the calendar and viewing it
+    args = ["Breakfast", "10/14/2018", "08:00", "09:00", ["194h382kd2l3kvi81ncu4d1jd"]]
+    schedule(args, calendar, site_id)
+    myview(calendar, site_id)
 
     # both server and poll for user input are non-blocking
     server = UdpServer("127.0.0.1", port)
@@ -127,4 +153,4 @@ if __name__ == "__main__":
                 print("Exiting.")
                 exit()
             else:
-                parse_command(command)
+                parse_command(command, calendar, clock, index)
