@@ -3,7 +3,7 @@ from math import sin, cos
 
 import numpy as np
 import cv2
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 
 # -----------------------------------------------------------------------------

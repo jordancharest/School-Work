@@ -3,7 +3,7 @@ from math import sin, cos
 
 import numpy as np
 import cv2
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 # -----------------------------------------------------------------------------
 def arg_parse():
     if len(argv) == 4:
@@ -99,11 +99,11 @@ if __name__ == "__main__":
         print("best as ellipse")
 
     # plot and save
-    x0 = original_pts[:,0]
-    y0 = original_pts[:,1]
-    plt.scatter(x0, y0, color='b', label='Data')
-    plt.scatter(com[0], com[1], color='r', label='CoM')
-    plt.plot(x0, (rho - x0*cos(theta))/sin(theta), color='k', label='Best Fit')
-    plt.legend()
-    plt.savefig(out_fig_name)
+    # x0 = original_pts[:,0]
+    # y0 = original_pts[:,1]
+    # plt.scatter(x0, y0, color='b', label='Data')
+    # plt.scatter(com[0], com[1], color='r', label='CoM')
+    # plt.plot(x0, (rho - x0*cos(theta))/sin(theta), color='k', label='Best Fit')
+    # plt.legend()
+    # plt.savefig(out_fig_name)
     # plt.show()
