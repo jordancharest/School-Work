@@ -5,6 +5,8 @@ class event:
         self.end = end
         self.name = name
         self.participants = participants
+        if not isinstance(participants, list):
+            self.participants = [self.participants]
 
     def __lt__(self, other):
         return ((self.date < other.date) or
