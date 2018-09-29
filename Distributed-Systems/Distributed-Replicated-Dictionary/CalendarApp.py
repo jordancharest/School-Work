@@ -6,14 +6,15 @@ from event import event
 
 """
 TODO:
-    - Need to assign numbers to each site (0, 1, 2, 3, ...) to index into matrix clock
-    - choose and build log data structure
-    - schedule()
-    - cancel()
-    - view()
-    - myview()
-    - log()
-    - insert()
+    - schedule():
+        - available(): check if users are available
+    - update clocks
+
+    - all message passing
+        - parse_message()
+        - send_message()
+        - has_received()
+    - actual Wuu-Berntstein algorithm
 """
 
 # -----------------------------------------------------------------------------
@@ -77,17 +78,29 @@ def parse_messaage(data, address):
     print("\nReceived message")
 
 # -----------------------------------------------------------------------------
-def parse_command(user_input, calendar, site_id, clock, index, log_file):
+def send_message():
+    pass
+
+# -----------------------------------------------------------------------------
+def available(participants, calendar, event):
+    return true
+
+# -----------------------------------------------------------------------------
+def has_received(clock, participant):
+    pass
+    
+# -----------------------------------------------------------------------------
+def parse_command(user_input, calendar, site_id, clock, I, log_file):
     user_input = user_input.split()
     command = user_input[0]
     args = user_input[1:]
 
     if command.lower() == "schedule":
-        schedule(args, calendar, site_id, log_file)
+        schedule(args, calendar, clock, I, site_id, log_file)
     elif command.lower() == "cancel":
-        cancel(args[0], calendar, site_id, log_file)
+        cancel(args[0], calendar, clock, I, site_id, log_file)
     elif command.lower() == "view":
-        view()
+        view(calendar)
     elif command.lower() == "myview":
         myview(calendar, site_id)
     elif command.lower() == "log":
@@ -96,7 +109,7 @@ def parse_command(user_input, calendar, site_id, clock, index, log_file):
         print("ERROR: Invalid command.")
 
 # -----------------------------------------------------------------------------
-def schedule(args, calendar, site_id, log_file):
+def schedule(args, calendar, clock, I, site_id, log_file):
     print("\nUser requested SCHEDULE")
     name, day, start, end = args[0:4]
     participants = args[4:]
@@ -108,18 +121,30 @@ def schedule(args, calendar, site_id, log_file):
     if len(participants) == 1:
         participants = participants[0].split(",")
 
-    # attempt to make event with user-given parameters
-    e = event(name, day, start, end, participants)
+        # attempt to make event with user-given parameters
+        e = event(name, day, start, end, participants)
 
-    # add the meeting and keep the event list sorted (__lt__ is defined for event)
-    calendar[site_id].append(e)
-    calendar[site_id].sort()
+    # ensure this user is included in the user list and everyone is available
+    if site_id not in participants:
+        print("You cannot schedule a meeting for other users.")
+    elif not availabile(participants, calendar, e):
+        print("Not all users are available at that time")
+    else:
 
-    log("create", e, log_file)
-    print("Meeting {0} scheduled.".format(name))
+        # add the meeting to all participants schedules
+        for p in participants:
+            calendar[p].append(e)
+            calendar[p].sort()
+
+        log("create", e, log_file)
+
+        # for now just increment the clock without checking to see if it was successful
+        clock[site_id][I[site_id]] += 1
+        print_matrix_clock(clock)
+        print("Meeting {0} scheduled.".format(name))
 
 # -----------------------------------------------------------------------------
-def cancel(meeting, calendar, site_id, log_file):
+def cancel(meeting, calendar, clock, I, site_id, log_file):
     print("\nUser requested CANCEL")
     events = len(calendar[site_id])
 
@@ -129,6 +154,8 @@ def cancel(meeting, calendar, site_id, log_file):
     if events == len(calendar[site_id]):
         print("No events were cancelled.")
     else:
+        clock[site_id][I[site_id]] += 1
+        print_matrix_clock(clock)
         log("delete", meeting, log_file)
         print("Meeting {0} cancelled.".format(meeting))
 
@@ -137,6 +164,15 @@ def cancel(meeting, calendar, site_id, log_file):
 def view(calendar):
     print("\nUser requested VIEW")
 
+    # get every event from the calendar, use set to avoid duplicates
+    events = {e for ID, event_list in calendar.items() for e in event_list}
+    events = list(events)
+
+    # sort in lexicographical order and print all
+    events.sort()
+    for e in events:
+        print(e)
+
 # -----------------------------------------------------------------------------
 def myview(calendar, site_ID):
     print("\nUser requested MYVIEW")
@@ -144,7 +180,6 @@ def myview(calendar, site_ID):
         print(e)
 # -----------------------------------------------------------------------------
 def log(action, event, log_file):
-
     if action == "create" or action == "delete":
         log_file.write(action + " " + str(event) + "\n")
     else:
@@ -157,16 +192,15 @@ def view_log(log_file):
 
 # =============================================================================
 if __name__ == "__main__":
-    site_id, port, hosts, clock, calendar, index = read_known_hosts()
+    site_id, port, hosts, clock, calendar, I = read_known_hosts()
     print_matrix_clock(clock)
     log_name = "log.txt"
     log_file = open(log_name, "r+")
     log_file.truncate(0)
 
-
     # test by adding an event to the calendar and viewing it
     args = ["Breakfast", "10/14/2018", "08:00", "09:00", site_id]
-    schedule(args, calendar, site_id, log_file)
+    schedule(args, calendar, clock, I, site_id, log_file)
     myview(calendar, site_id)
 
     # both server and poll for user input are non-blocking
@@ -188,4 +222,4 @@ if __name__ == "__main__":
                 print("Exiting.")
                 exit()
             else:
-                parse_command(command, calendar, site_id, clock, index, log_file)
+                parse_command(command, calendar, site_id, clock, I, log_file)
