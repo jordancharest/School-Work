@@ -1,10 +1,8 @@
 import sys
 from select import select
 
-
 from UdpServer import UdpServer
 from event import event
-
 
 """
 TODO:
@@ -36,9 +34,9 @@ def read_known_hosts():
             for line in lines:
                 ID, port = line.split()
                 hosts.append((ID, port))
-                if len(ID) != 25 or not ID.isalnum():
-                    print("IDs must be 25 character alphanumeric string")
-                    exit()
+                # if len(ID) != 25 or not ID.isalnum():
+                    # print("IDs must be 25 character alphanumeric string")
+                    # exit()
 
         # ensure our site ID is in the group of known hosts
         for host in hosts:
@@ -76,62 +74,99 @@ def print_matrix_clock(T):
 
 # -----------------------------------------------------------------------------
 def parse_messaage(data, address):
-    print("Received message")
+    print("\nReceived message")
 
 # -----------------------------------------------------------------------------
-def parse_command(user_input, calendar, clock, index):
+def parse_command(user_input, calendar, site_id, clock, index, log_file):
     user_input = user_input.split()
     command = user_input[0]
     args = user_input[1:]
 
     if command.lower() == "schedule":
-        schedule(args)
+        schedule(args, calendar, site_id, log_file)
     elif command.lower() == "cancel":
-        cancel(args)
+        cancel(args[0], calendar, site_id, log_file)
     elif command.lower() == "view":
         view()
     elif command.lower() == "myview":
-        myview()
+        myview(calendar, site_id)
     elif command.lower() == "log":
-        log()
+        view_log(log_file)
     else:
         print("ERROR: Invalid command.")
 
 # -----------------------------------------------------------------------------
-def schedule(args, calendar, site_id):
-    print("User requested SCHEDULE")
-    name, day, start, end, participants = args
+def schedule(args, calendar, site_id, log_file):
+    print("\nUser requested SCHEDULE")
+    name, day, start, end = args[0:4]
+    participants = args[4:]
+
+    # be robust to whether a user inputs a list like this:
+    # user1 user2 user3
+    # or this:
+    # user1,user2,user3
+    if len(participants) == 1:
+        participants = participants[0].split(",")
+
+    # attempt to make event with user-given parameters
     e = event(name, day, start, end, participants)
 
-    # add the meeting and keep the calendar sorted
+    # add the meeting and keep the event list sorted (__lt__ is defined for event)
     calendar[site_id].append(e)
     calendar[site_id].sort()
 
+    log("create", e, log_file)
+    print("Meeting {0} scheduled.".format(name))
+
 # -----------------------------------------------------------------------------
-def cancel(meeting):
-    print("User requested CANCEL")
+def cancel(meeting, calendar, site_id, log_file):
+    print("\nUser requested CANCEL")
+    events = len(calendar[site_id])
+
+    # modify the event list to remove the meeting
+    calendar[site_id] = [event for event in calendar[site_id] if event.name != meeting]
+
+    if events == len(calendar[site_id]):
+        print("No events were cancelled.")
+    else:
+        log("delete", meeting, log_file)
+        print("Meeting {0} cancelled.".format(meeting))
+
 
 # -----------------------------------------------------------------------------
 def view(calendar):
-    print("User requested VIEW")
+    print("\nUser requested VIEW")
 
 # -----------------------------------------------------------------------------
 def myview(calendar, site_ID):
-    print("User requested MYVIEW")
-    print(calendar[site_id])
-
+    print("\nUser requested MYVIEW")
+    for e in calendar[site_id]:
+        print(e)
 # -----------------------------------------------------------------------------
-def log():
-    print("User requested LOG")
+def log(action, event, log_file):
+
+    if action == "create" or action == "delete":
+        log_file.write(action + " " + str(event) + "\n")
+    else:
+        print("Unknown action type. Cannot log.")
+# -----------------------------------------------------------------------------
+def view_log(log_file):
+    print("\nUser requested LOG")
+    log_file.seek(0)
+    print(log_file.read())
 
 # =============================================================================
 if __name__ == "__main__":
     site_id, port, hosts, clock, calendar, index = read_known_hosts()
     print_matrix_clock(clock)
+    log_name = "log.txt"
+    log_file = open(log_name, "r+")
+    log_file.truncate(0)
+
 
     # test by adding an event to the calendar and viewing it
-    args = ["Breakfast", "10/14/2018", "08:00", "09:00", ["194h382kd2l3kvi81ncu4d1jd"]]
-    schedule(args, calendar, site_id)
+    args = ["Breakfast", "10/14/2018", "08:00", "09:00", site_id]
+    schedule(args, calendar, site_id, log_file)
     myview(calendar, site_id)
 
     # both server and poll for user input are non-blocking
@@ -153,4 +188,4 @@ if __name__ == "__main__":
                 print("Exiting.")
                 exit()
             else:
-                parse_command(command, calendar, clock, index)
+                parse_command(command, calendar, site_id, clock, index, log_file)
