@@ -1,5 +1,6 @@
 import sys
 from select import select
+import json
 
 from UdpServer import UdpServer
 from event import event
@@ -34,7 +35,7 @@ def read_known_hosts():
             lines = file.readlines()
             for line in lines:
                 ID, port = line.split()
-                hosts.append((ID, port))
+                hosts.append((ID, int(port)))
                 # if len(ID) != 25 or not ID.isalnum():
                     # print("IDs must be 25 character alphanumeric string")
                     # exit()
@@ -74,8 +75,9 @@ def print_matrix_clock(T):
     print()
 
 # -----------------------------------------------------------------------------
-def parse_messaage(data, address):
-    print("\nReceived message")
+def parse_message(data, address):
+    print("\nReceived:", data)
+    print(data["01234"])
 
 # -----------------------------------------------------------------------------
 def send_message():
@@ -83,12 +85,12 @@ def send_message():
 
 # -----------------------------------------------------------------------------
 def available(participants, calendar, event):
-    return true
+    return True
 
 # -----------------------------------------------------------------------------
 def has_received(clock, participant):
     pass
-    
+
 # -----------------------------------------------------------------------------
 def parse_command(user_input, calendar, site_id, clock, I, log_file):
     user_input = user_input.split()
@@ -127,7 +129,7 @@ def schedule(args, calendar, clock, I, site_id, log_file):
     # ensure this user is included in the user list and everyone is available
     if site_id not in participants:
         print("You cannot schedule a meeting for other users.")
-    elif not availabile(participants, calendar, e):
+    elif not available(participants, calendar, e):
         print("Not all users are available at that time")
     else:
 
@@ -207,11 +209,23 @@ if __name__ == "__main__":
     server = UdpServer("127.0.0.1", port)
     timeout = 0
 
+
+    print("String:", type(json.dumps("Hello")))
+    print("Dictionary:", type(json.dumps(clock)))
+
+
+    # just for testing. Send a message to all known hosts
+    for host, port in hosts:
+        server.send("Hello from {0}".format(site_id), ("127.0.0.1", port))
+        server.send(json.dumps(clock), ("127.0.0.1", port))
+
+
     print("Enter a command:")
     while True:
         # attempt to receive any message
         data, address = server.receive()
         if data:
+            print("Datatype:", type(data))
             parse_message(data, address)
 
         # check for user input
