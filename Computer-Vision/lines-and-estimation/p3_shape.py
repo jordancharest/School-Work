@@ -29,7 +29,7 @@ def read_points(filename):
     return np.array(pts)
 
 # -----------------------------------------------------------------------------
-def print_characteristics(com):
+def print_characteristics(com, x, y):
     print("min: ({0:.3f},{1:.3f})".format(np.min(x), np.min(y)))
     print("max: ({0:.3f},{1:.3f})".format(np.max(x), np.max(y)))
     print("com: ({0:.3f},{1:.3f})".format(com[0], com[1]))
@@ -48,21 +48,21 @@ def find_min_and_max_axes(pts):
     # display min and max axes
     i_max = np.argmax(eig_vals)
     i_min = np.argmin(eig_vals)
-    vector_max = eig_vectors[:, i_max]
-    vector_min = eig_vectors[:, i_min]
-    if vector_min[0] < 0:
-        vector_min = -vector_min
-    if vector_max[0] < 0:
-        vector_max = -vector_max
+    vec_max = eig_vectors[:, i_max]
+    vec_min = eig_vectors[:, i_min]
+    if vec_min[0] < 0:
+        vec_min = -vec_min
+    if vec_max[0] < 0:
+        vec_max = -vec_max
 
     # standard deviations are the sqrt of the eignevalues
     s_min = np.sqrt(eig_vals[i_min])
     s_max = np.sqrt(eig_vals[i_max])
 
-    print("min axis: ({0:.3f},{1:.3f}), sd {2:.3f}".format(vector_min[0], vector_min[1], s_min))
-    print("max axis: ({0:.3f},{1:.3f}), sd {2:.3f}".format(vector_max[0], vector_max[1], s_max))
+    print("min axis: ({0:.3f},{1:.3f}), sd {2:.3f}".format(vec_min[0], vec_min[1], s_min))
+    print("max axis: ({0:.3f},{1:.3f}), sd {2:.3f}".format(vec_max[0], vec_max[1], s_max))
 
-    return vector_min, s_min, vector_max, s_max
+    return vec_min, s_min, vec_max, s_max
 
 
 # =============================================================================
@@ -74,14 +74,16 @@ if __name__ == "__main__":
 
     # calculate some characteristics of the point set: min, max, average
     com = np.array((np.average(x), np.average(y)))
-    print_characteristics(com)
+    print_characteristics(com, x, y)
 
-    # center the data around the center of mass, then determine axes of smallest and largest variance
+    # center the data around the center of mass, then determine axes of 
+    # smallest and largest variance
     pts -= com
     vector_min, s_min, vector_max, s_max = find_min_and_max_axes(pts)
 
     # determine closest point representation of the line
-    # since we centered the data around the center of mass, we know that that point is on the line
+    # since we centered the data around the center of mass, we know that
+    # that point is on the line
     theta = np.arccos(vector_min[0])
     rho = com[0] * np.cos(theta) + com[1] * np.sin(theta)
     print("closest point: rho {0:.3f}, theta {1:.3f}".format(rho, theta))

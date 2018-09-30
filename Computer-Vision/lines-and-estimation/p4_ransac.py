@@ -71,15 +71,13 @@ if __name__  == "__main__":
 
         # calculate the distance between each point and the line
         error = (x*cos(theta) + y*sin(theta) - rho)**2
-        # print(error)
 
-        # only keep the ones that are less than the tolerance
+        # only keep the points that are less than the tolerance
         error = error[error < tau**2]
         k = len(error)
 
-        # check if we have a new best fit
+        # if we have a new best fit, then save it
         if k > k_max:
-            # save this fit
             best_i, best_j = i,j
             k_max = k
             rho_model = rho
