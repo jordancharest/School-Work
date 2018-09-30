@@ -13,54 +13,33 @@ def arg_parse():
         img_list = [directory +  "/" + name for name in img_list if ".jpg" in name.lower()]
         return img_list, out_img, abs(float(sigma)), abs(float(p))
     else:
-        print(len(argv))
-        print("Invalid Argument(s).")
+        print("Invalid Argument(s):", len(argv))
         print("USAGE: {0} <directory> <out-img-name> <sigma> <p>".format(argv[0]))
         exit()
 
 # -----------------------------------------------------------------------------
-def output(M, N, top_left, top_right, bottom_left, bottom_right, img):
-    print("Energies at ({0}, {1})".format(M//4, N//4))
-    for i, energy in enumerate(top_left):
-        print("{0}: {1:.1f}".format(i, energy))
-    print("RGB: ({0:.0f}, {1:.0f}, {2:.0f})\n".format(img[M//4, N//4, 2], img[M//4, N//4, 1], img[M//4, N//4, 0]))
+def output(M, N, location_list, img):
+    locations = ((M//4, N//4), (M//4, 3*N//4), (3*M//4, N//4), (3*M//4, 3*N//4))
 
-    print("Energies at ({0}, {1})".format(M//4, 3*N//4))
-    for i, energy in enumerate(top_right):
-        print("{0}: {1:.1f}".format(i, energy))
-    print("RGB: ({0:.0f}, {1:.0f}, {2:.0f})\n".format(img[M//4, 3*N//4, 2], img[M//4, 3*N//4, 1], img[M//4, 3*N//4, 0]))
-
-
-    print("Energies at ({0}, {1})".format(3*M//4, N//4))
-    for i, energy in enumerate(bottom_left):
-        print("{0}: {1:.1f}".format(i, energy))
-    print("RGB: ({0:.0f}, {1:.0f}, {2:.0f})\n".format(img[3*M//4, N//4, 2], img[3*M//4, N//4, 1], img[3*M//4, N//4, 0]))
-
-
-    print("Energies at ({0}, {1})".format(3*M//4, 3*N//4))
-    for i, energy in enumerate(bottom_right):
-        print("{0}: {1:.1f}".format(i, energy))
-    print("RGB: ({0:.0f}, {1:.0f}, {2:.0f})".format(img[3*M//4, 3*N//4, 2], img[3*M//4, 3*N//4, 1], img[3*M//4, 3*N//4, 0]))
-
+    for i,(m,n) in enumerate(locations):
+        print("\nEnergies at ({0}, {1})".format(m, n))
+        for j, energy in enumerate(location_list[i]):
+            print("{0}: {1:.1f}".format(j, energy))
+        print("RGB: ({0:.0f}, {1:.0f}, {2:.0f})".format(img[m, n, 2], img[m, n, 1], img[m, n, 0]))
 
 # =============================================================================
 if __name__ == "__main__":
     img_list, out_img_name, sigma, p = arg_parse()
     h = floor(2.5  * sigma)
     ksize = 2 * h + 1
-    # ksize = int(sqrt(ksize))
+    img_list.sort()
     
     img = cv2.imread(img_list[0], cv2.IMREAD_COLOR)
-    energy_sum = np.zeros(img.shape, dtype=np.float64)
+    energy_sum = np.zeros(img.shape[0:2], dtype=np.float64)
     weighted_imgs = np.zeros(img.shape, dtype=np.float64)
 
-    # print(img.shape)
-
-    print("Results:\n")
-    top_left = []
-    top_right = []
-    bottom_left = []
-    bottom_right = []
+    print("Results:")
+    top_left, top_right, bottom_left, bottom_right = [], [], [], []
     M, N, _ = img.shape
 
     # for each image in the directory
@@ -87,44 +66,13 @@ if __name__ == "__main__":
         bottom_right.append(energy[3*M//4, 3*N//4])
 
         # calculate running sum of the weighted energy of each image
-        energy = np.dstack((energy, energy, energy))
-        weighted_imgs += energy**p * img
+        weighted_imgs += energy[:, :, None]**p * img
         energy_sum += energy**p
 
     # normalize
-    # print(energy_sum.shape)
-    result = weighted_imgs / energy_sum
+    result = weighted_imgs / energy_sum[:, :, None]
 
-    # print(top_left)
-
-    output(M, N, top_left, top_right, bottom_left, bottom_right, result)
-
+    # output results
+    output(M, N, (top_left, top_right, bottom_left, bottom_right), result)
     cv2.imwrite(out_img_name, result)
     print("Wrote", out_img_name)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    # SVD A represents:
-    # and eigendecomposition represents:
-    # this is how they relate:
