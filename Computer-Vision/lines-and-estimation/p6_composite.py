@@ -48,11 +48,13 @@ if __name__ == "__main__":
     img_list, out_img_name, sigma, p = arg_parse()
     h = floor(2.5  * sigma)
     ksize = 2 * h + 1
-    ksize = int(sqrt(ksize))
+    # ksize = int(sqrt(ksize))
     
     img = cv2.imread(img_list[0], cv2.IMREAD_COLOR)
     energy_sum = np.zeros(img.shape, dtype=np.float64)
     weighted_imgs = np.zeros(img.shape, dtype=np.float64)
+
+    # print(img.shape)
 
     print("Results:\n")
     top_left = []
@@ -61,28 +63,22 @@ if __name__ == "__main__":
     bottom_right = []
     M, N, _ = img.shape
 
-    # kernelX = cv2.getGaussianKernel(int(sqrt(ksize)), sigma); 
-    # kernelY = cv2.getGaussianKernel(int(sqrt(ksize)), sigma); 
-    # kernelXY = kernelX * kernelY.T;
-    # print(kernelXY)
-
-
     # for each image in the directory
     for img_name in img_list:
         img = cv2.imread(img_name, cv2.IMREAD_COLOR)
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
         # calculate the gradients
-        sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=ksize)
-        sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=ksize)
+        btype = cv2.BORDER_DEFAULT
+        sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3, borderType=btype)
+        sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3, borderType=btype)
         gradient = sobelx**2 + sobely**2
 
         # calculate energy for each pixel
-        energy = cv2.GaussianBlur(gradient, (ksize, ksize), sigma)
-        # energy = cv2.GaussianBlur(gray, (int(sqrt(ksize)), int(sqrt(ksize))), sigma)
+        energy = cv2.GaussianBlur(gradient, (ksize, ksize), sigma, borderType=btype)
 
         # avoid divide by zero later
-        energy[energy == 0] = 0.000001
+        energy[energy < 0.000001] = 0.000001
 
         # save for the output
         top_left.append(energy[M//4, N//4])
