@@ -1,4 +1,5 @@
 import socket
+import pickle
 
 
 
@@ -10,8 +11,8 @@ class UdpServer:
         self.sock.bind((self.host, self.port))
         self.sock.setblocking(0)
 
-    def send(self):
-        pass
+    def send(self, data, address):
+        self.sock.sendto(pickle.dumps(data), address)
 
     def receive(self, size=1024):
         """
@@ -24,7 +25,7 @@ class UdpServer:
         except socket.error:
             return None, None
         else:
-            return data, address
+            return pickle.loads(data), address
 
 
 # Ignore
