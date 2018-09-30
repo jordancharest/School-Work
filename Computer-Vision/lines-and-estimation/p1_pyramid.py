@@ -1,5 +1,5 @@
 from sys import argv
-from math import ceil
+from math import ceil, floor
 
 import numpy as np
 import cv2
@@ -19,15 +19,15 @@ if __name__ == "__main__":
     img = cv2.imread(in_img_name, cv2.IMREAD_COLOR)
 
     # calculate the size of the output image
-    result = 0
+    new_width = 0
     height, width, _ = img.shape
     while width >= 20 and height >= 20:
-        result += width
+        new_width += width
         width //= 2
         height //= 2
 
     # create empty output image
-    out_img = np.zeros((img.shape[0], result, img.shape[2]))
+    out_img = np.zeros((img.shape[0], new_width, img.shape[2]))
 
     # continuously copy then resize the original image into the output
     row = 0
@@ -39,7 +39,7 @@ if __name__ == "__main__":
         #  resize image and adjust the row and column
         col += img.shape[1]
         img = cv2.resize(img, (img.shape[1]//2, img.shape[0]//2))
-        row = out_img.shape[0]//2 - ceil(img.shape[0]/2)
+        row = floor(out_img.shape[0]/2 - img.shape[0]/2)
 
     print("Final shape", out_img.shape)
     cv2.imwrite(out_img_name, out_img)
