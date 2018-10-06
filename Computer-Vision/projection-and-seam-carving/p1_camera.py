@@ -43,6 +43,8 @@ def get_camera_matrix(R, T, f, d, ic, jc):
     C = np.ones((3,4))
     print(C)
 
+    return C
+
 
 # =============================================================================
 if __name__ == "__main__":
