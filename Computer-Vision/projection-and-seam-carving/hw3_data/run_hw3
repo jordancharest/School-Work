@@ -1,0 +1,5 @@
+python p1_camera.py params_p1_v1.txt points_p1_v1.txt > p1_v1_out.txt
+python p1_camera.py params_p1_v2.txt points_p1_v2.txt > p1_v2_out.txt
+python p1_camera.py params_p1_v3.txt points_p1_v3.txt > p1_v3_out.txt
+python p2_seam_carve.py whistler.png > p2_whistler_out.txt
+python p2_seam_carve.py autumn.png > p2_autumn_out.txt
