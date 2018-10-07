@@ -1,4 +1,5 @@
 from sys import argv
+import math as m
 
 import numpy as np
 
@@ -40,13 +41,51 @@ def read_points(filename):
 
 # -----------------------------------------------------------------------------
 def get_camera_matrix(R, T, f, d, ic, jc):
-    C = np.ones((3,4))
-    print(C)
 
-    return C
+    # rotations in each direction
+    Rx = np.array([[1.,           0.,            0.],
+                   [0.,  m.cos(R[0]),  -m.sin(R[0])],
+                   [0.,  m.sin(R[0]),   m.cos(R[0])]])
+
+    Ry = np.array([[ m.cos(R[1]),  0.,  m.sin(R[1])],
+                   [          0.,  1.,           0.],
+                   [-m.sin(R[1]),  0.,  m.cos(R[1])]])
+
+    Rz = np.array([[m.cos(R[2]),  -m.sin(R[2]),  0.],
+                   [m.sin(R[2]),   m.cos(R[2]),  0.],
+                   [         0.,            0.,  1.]])
+
+    # rotation matrix
+    Rot = Rx @ Ry @ Rz
+
+
+    # pixels are square of size 'd'
+    sx = f/d
+    sy = f/d
+    K = np.array([[sx,  0.,  ic],
+                  [0.,  sy,  jc],
+                  [0.,  0.,  1.]])
+
+
+
+
+
+    print(Rot)
+
+
+
+
+    print(Rx)
+    print(Ry)
+    print(Rz)
+
+
+    # return C
 
 
 # =============================================================================
 if __name__ == "__main__":
     points_vector, R, T, f, d, ic, jc = arg_parse()
-    C = get_camera_matrix(R, T, f, d, ic, jc)
+    M = get_camera_matrix(R, T, f, d, ic, jc)
+    print("Matrix M:")
+    print(M)
