@@ -28,8 +28,8 @@ def read_params(filename):
         print("open() failed")
         exit()
 
-    R = [float(i) for i in R]
-    T = [float(i) for i in T]
+    R = np.array([float(i) for i in R])
+    T = np.array([[float(i) for i in T]])
 
     return R, T, float(f), float(d), float(ic), float(jc)
 
@@ -71,6 +71,9 @@ def get_camera_matrix(R, T, f, d, ic, jc):
 
 
     print(Rot)
+    print(T)
+    Rt = np.hstack((Rot, T.T))
+    print(Rt)
 
 
 
@@ -80,7 +83,7 @@ def get_camera_matrix(R, T, f, d, ic, jc):
     print(Rz)
 
 
-    # return C
+    return K @ Rt
 
 
 # =============================================================================
