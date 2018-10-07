@@ -28,7 +28,8 @@ def read_params(filename):
         print("open() failed")
         exit()
 
-    R = np.array([float(i) for i in R])
+    # convert to flaots and convert rotations to radians
+    R = np.array([float(i)*m.pi/180. for i in R])
     T = np.array([[float(i) for i in T]])
 
     return R, T, float(f), float(d), float(ic), float(jc)
@@ -59,36 +60,36 @@ def get_camera_matrix(R, T, f, d, ic, jc):
     Rot = Rx @ Ry @ Rz
 
 
-    # pixels are square of size 'd'
-    sx = f/d
-    sy = f/d
+    # pixels are square of size 'd' microns - convert to millimeters
+    print(f,d,ic,jc)
+    sx = f/(d * 1e-3)
+    sy = f/(d * 1e-3)
     K = np.array([[sx,  0.,  ic],
                   [0.,  sy,  jc],
                   [0.,  0.,  1.]])
 
+    print(K)
 
-
-
-
-    print(Rot)
-    print(T)
-    Rt = np.hstack((Rot, T.T))
+    # concatenate rotation and translation
+    Rt = np.hstack((Rot, -T.T))
     print(Rt)
 
+    # multiply to form camera matrix
+    M = K @ Rt
+
+    return M
 
 
-
-    print(Rx)
-    print(Ry)
-    print(Rz)
-
-
-    return K @ Rt
-
+# -----------------------------------------------------------------------------
+def print_matrix(M):
+    for row in M:
+        for element in row[:len(row)-1]:
+            print("{0:.2f}, ".format(element), end='')
+        print("{0:.2f}".format(row[-1]))
 
 # =============================================================================
 if __name__ == "__main__":
     points_vector, R, T, f, d, ic, jc = arg_parse()
     M = get_camera_matrix(R, T, f, d, ic, jc)
     print("Matrix M:")
-    print(M)
+    print_matrix(M)
