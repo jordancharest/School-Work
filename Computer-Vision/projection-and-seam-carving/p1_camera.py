@@ -68,16 +68,36 @@ def get_camera_matrix(R, T, f, d, ic, jc):
                   [0.,  sy,  jc],
                   [0.,  0.,  1.]])
 
-    print(K)
-
     # concatenate rotation and translation
-    Rt = np.hstack((Rot, -T.T))
-    print(Rt)
+    Rt = np.hstack((Rot.T, -Rot.T @ T.T))
 
     # multiply to form camera matrix
     M = K @ Rt
 
     return M
+
+# -----------------------------------------------------------------------------
+def project_points(points, M):
+    visible = []
+    hidden = []
+
+    print("Projections:")
+    for i,pt in enumerate(points):
+
+        warped_pt = np.linalg.inv(M) * pt
+        print(warped_pt)
+
+
+        # print("{0}: {1:.1f} {2:.1f} {3:.1f}".format(i, pt[0], pt[1], pt[2]), end='')
+        # print("=> ")
+
+
+
+
+
+
+
+    return visible, hidden
 
 
 # -----------------------------------------------------------------------------
@@ -89,7 +109,18 @@ def print_matrix(M):
 
 # =============================================================================
 if __name__ == "__main__":
-    points_vector, R, T, f, d, ic, jc = arg_parse()
+    points, R, T, f, d, ic, jc = arg_parse()
     M = get_camera_matrix(R, T, f, d, ic, jc)
     print("Matrix M:")
     print_matrix(M)
+
+    visible, hidden = project_points(points, M)
+
+    print("visible:", end='')
+    for pt in visible:
+        print(" {0}".format(pt), end='')
+
+    print("\nhidden:", end='')
+    for pt in hidden:
+        print(" {0}".format(pt), end='')
+    print()
