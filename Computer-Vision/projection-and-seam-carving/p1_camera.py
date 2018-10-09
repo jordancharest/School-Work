@@ -61,7 +61,6 @@ def get_camera_matrix(R, T, f, d, ic, jc):
 
 
     # pixels are square of size 'd' microns - convert to millimeters
-    print(f,d,ic,jc)
     sx = f/(d * 1e-3)
     sy = f/(d * 1e-3)
     K = np.array([[sx,  0.,  ic],
@@ -77,25 +76,45 @@ def get_camera_matrix(R, T, f, d, ic, jc):
     return M
 
 # -----------------------------------------------------------------------------
-def project_points(points, M):
+def project_points(points, M, ic, jc):
     visible = []
     hidden = []
 
     print("Projections:")
     for i,pt in enumerate(points):
+        print("{0}: {1:.1f} {2:.1f} {3:.1f} ".format(i, pt[0], pt[1], pt[2]), end='')
+        
+        # convert to homogenous
+        pt = np.append(pt, 1.0)
 
+        # project with camera matrix and convert back to affine
+        warp = M @ pt
+        row = warp[1]/warp[2]
+        col = warp[0]/warp[2]
 
-        # print("{0}: {1:.1f} {2:.1f} {3:.1f}".format(i, pt[0], pt[1], pt[2]), end='')
-        # print("=> ")
+        # convert back to affine
+        print("=> {0:.1f} {1:.1f} ".format(row, col), end='')
 
+        # check if inside the image (4000 x 6000 image)
+        if row >= 0 and row < 4000 and col >= 0 and col < 6000:
+            print("inside")
+        else:
+            print("outside")
 
+        # check if point in front of or behind the camera (z positive or negative)
+        if warp[2] < 0:
+            hidden.append(i)
+        else:
+            visible.append(i)
 
+    print("visible:", end='')
+    for pt in visible:
+        print(" {0}".format(pt), end='')
 
-
-
-
-    return visible, hidden
-
+    print("\nhidden:", end='')
+    for pt in hidden:
+        print(" {0}".format(pt), end='')
+    print()
 
 # -----------------------------------------------------------------------------
 def print_matrix(M):
@@ -111,13 +130,5 @@ if __name__ == "__main__":
     print("Matrix M:")
     print_matrix(M)
 
-    visible, hidden = project_points(points, M)
+    project_points(points, M, ic, jc)
 
-    print("visible:", end='')
-    for pt in visible:
-        print(" {0}".format(pt), end='')
-
-    print("\nhidden:", end='')
-    for pt in hidden:
-        print(" {0}".format(pt), end='')
-    print()
