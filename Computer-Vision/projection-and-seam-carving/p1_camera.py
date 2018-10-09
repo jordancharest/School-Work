@@ -84,9 +84,6 @@ def project_points(points, M):
     print("Projections:")
     for i,pt in enumerate(points):
 
-        warped_pt = np.linalg.inv(M) * pt
-        print(warped_pt)
-
 
         # print("{0}: {1:.1f} {2:.1f} {3:.1f}".format(i, pt[0], pt[1], pt[2]), end='')
         # print("=> ")
