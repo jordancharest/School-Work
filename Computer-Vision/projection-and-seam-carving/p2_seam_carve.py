@@ -1,4 +1,5 @@
 from sys import argv
+import ntpath
 
 import numpy as np
 import cv2
@@ -7,14 +8,21 @@ import cv2
 # -----------------------------------------------------------------------------
 def arg_parse():
     if len(argv) == 2:
-        script, img_name = argv
-        img = cv2.imread(img_name, cv2.IMREAD_COLOR)
+        script, path = argv
+        img = cv2.imread(path, cv2.IMREAD_COLOR)
+
+        # extract image name
+        _, filename = ntpath.split(path)
+        split = filename.split(".")
+        filename = split[0]
+        ext = split[1]
+
     else:
         print("Invalid Argument(s).")
         print("USAGE: {0} <img>".format(argv[0]))
         exit()
 
-    return img
+    return img, filename, ext
 
 # -----------------------------------------------------------------------------
 def calculate_energy(img):
@@ -98,11 +106,9 @@ def remove_seam(img, seam):
     return result
 
 
-
-
 # =============================================================================
 if __name__ == "__main__":
-    img = arg_parse()
+    img, filename, ext = arg_parse()
     print(img.shape)
 
     rotated = False
@@ -125,4 +131,4 @@ if __name__ == "__main__":
         img = np.rot90(img, k=-1, axes=(1,0))
 
 
-    cv2.imwrite("result.png", img)
+    cv2.imwrite(filename + "_final." + ext, img)
