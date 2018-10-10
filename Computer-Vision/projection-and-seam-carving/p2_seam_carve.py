@@ -105,6 +105,12 @@ if __name__ == "__main__":
     img = arg_parse()
     print(img.shape)
 
+    rotated = False
+    # rotate the image if it is vertical
+    if img.shape[0] > img.shape[1]:
+        img = np.rot90(img, k=1, axes=(1,0))
+        rotated = True
+
     # carve seams until the image is square
     while img.shape[0] != img.shape[1]:
         # print("Finding seam:", img.shape)
@@ -115,4 +121,8 @@ if __name__ == "__main__":
 
 
     print(img.shape)
+    if rotated:
+        img = np.rot90(img, k=-1, axes=(1,0))
+
+
     cv2.imwrite("result.png", img)
