@@ -29,13 +29,13 @@ def arg_parse():
 def calculate_energy(img):
     img = np.uint8(img)
 
-    sigma = 1
+    sigma = 0.5
     h = m.floor(2.5*sigma)
-    ksize = (3, 3)
+    ksize = (2*h+1, 2*h+1)
 
     # compute energy (sum of gradients) from grayscaled image
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    # gray = cv2.GaussianBlur(gray, ksize, sigma, borderType=cv2.BORDER_DEFAULT)
+    gray = cv2.GaussianBlur(gray, ksize, sigma, borderType=cv2.BORDER_DEFAULT)
     sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3, borderType=cv2.BORDER_DEFAULT)
     sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3, borderType=cv2.BORDER_DEFAULT)
     energy = np.abs(sobelx) + np.abs(sobely)
@@ -134,16 +134,13 @@ def output(i, img, seam, rotated, avg_energy):
 # =============================================================================
 if __name__ == "__main__":
     img, filename, ext = arg_parse()
-    print(img.shape)
 
     rotated = False
     # rotate the image if it is vertical
     if img.shape[0] > img.shape[1]:
-        img = np.rot90(img, k=1, axes=(1,0))
+        img = np.rot90(img, k=-1, axes=(1,0))
         rotated = True
 
-
-    
     # carve seams until the image is square
     i = 0
     while img.shape[0] != img.shape[1]:
@@ -165,12 +162,11 @@ if __name__ == "__main__":
         i += 1
 
     i -= 1
+
     # print some statistics for the last run
     output(i, img, seam, rotated, avg_energy)
 
-    print(img.shape)
     if rotated:
-        img = np.rot90(img, k=-1, axes=(1,0))
-
+        img = np.rot90(img, k=1, axes=(1,0))
 
     cv2.imwrite(filename + "_final." + ext, img)
