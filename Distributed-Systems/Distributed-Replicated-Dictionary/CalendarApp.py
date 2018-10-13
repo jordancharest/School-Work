@@ -6,31 +6,6 @@ import socket
 from UdpServer import UdpServer
 from event import Event
 
-"""
-TODO:
-    - schedule():
-        - available(): check if users are available
-    - update clocks
-
-    - all message passing
-        - parse_message()
-        - send_message()
-        - has_received()
-    - actual Wuu-Berntstein algorithm
-"""
-
-# -----------------------------------------------------------------------------
-def get_site_index(site_id, hosts):
-    site_index = 0
-    for host in hosts:
-        site_index = site_index + 1
-        if host[0] == hostname:
-            site_id = str(ct)
-            ip = host[0]
-            port = host[1]
-            break
-    return site_index
-
 # -----------------------------------------------------------------------------
 def read_known_hosts():
     """
@@ -84,8 +59,8 @@ def read_known_hosts():
     return site_id, site_index, ip, int(port), hosts, clock, calendar, PL
 
 # -----------------------------------------------------------------------------
-def print_matrix_clock(T):
-    print("\nClock:")
+def print_matrix_clock(site_id, T):
+    print("\n{0} clock:".format(site_id))
     for ID, clock in T.items():
         print(ID, clock)
     print()
@@ -141,7 +116,6 @@ def receive_message(data, address, calendar, receiver_id, receiver_index, clock,
             name = meeting
             calendar = [event for event in calendar if event.name != name]     
             
-    #print(calendar)
             
     
     # host info
@@ -172,7 +146,6 @@ def receive_message(data, address, calendar, receiver_id, receiver_index, clock,
     PL_temp = PL.copy()
     PL = []
     for eR in PL_temp:
-        #print(eR)
         flag = False
         for s in range (1,n_hosts):
             if not hasRec(clock, eR, hosts[s-1][0]):
@@ -233,9 +206,7 @@ def parse_command(user_input, calendar, site_id, site_index, clock, PL, server, 
                 break                
         if len(participants) == 1:
             participants = participants[0].split(",")
-            
-        #print(participants)    
-            
+                        
         calendar = cancel(args[0], calendar, clock, site_id, site_index, PL)
         
         ct = 0
@@ -251,7 +222,7 @@ def parse_command(user_input, calendar, site_id, site_index, clock, PL, server, 
     elif command.lower() == "log":
         view_log(PL)
     elif command.lower() == "clock":
-        print_matrix_clock(clock)
+        print_matrix_clock(site_id, clock)
     else:
         print("ERROR: Invalid command.")
         
@@ -306,7 +277,7 @@ def cancel(meeting, calendar, clock, site_id, site_index, PL):
         print("No events were cancelled.")
     else:
         clock[str(site_id)][site_index-1] += 1
-        print_matrix_clock(clock)
+        print_matrix_clock(site_id, clock)
         log("delete", meeting, clock[str(site_id)][site_index-1], site_index, PL)
         print("Meeting {0} cancelled.".format(meeting))
     return calendar
@@ -359,7 +330,7 @@ def hasRec(Ti, eR, k):
 # =============================================================================
 if __name__ == "__main__":
     site_id, site_index, ip, port, hosts, clock, calendar, PL = read_known_hosts()
-    print_matrix_clock(clock)
+    print_matrix_clock(site_id, clock)
     
 
     # both server and poll for user input are non-blocking
