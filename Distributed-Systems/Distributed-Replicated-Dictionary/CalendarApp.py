@@ -73,9 +73,7 @@ def parse_message(data, address):
 # -----------------------------------------------------------------------------
 def send_message(PL, clock, receiver_id, server, ip, port):
     NP = []
-    #print(PL)
     for eR in PL:
-        #print(eR)
         if not hasRec(clock, eR, receiver_id):
             NP.append(eR)
             
@@ -92,13 +90,10 @@ def receive_message(data, address, calendar, receiver_id, receiver_index, clock,
     data_dict = json.loads(data)
     Tk = data_dict['clock']
     NP = data_dict['NP']
-    #print_matrix_clock(Tk)
-    #view_log(NP)
     
     # compute NE
     NE = []
     for fR in NP:
-        #print(fR)
         if not hasRec(clock, fR, receiver_id):
             NE.append(fR)
     
@@ -115,7 +110,6 @@ def receive_message(data, address, calendar, receiver_id, receiver_index, clock,
         if usr_cmd == "delete":
             name = meeting
             calendar = [event for event in calendar if event.name != name]     
-            
             
     
     # host info
@@ -185,9 +179,10 @@ def has_received(clock, participant):
 def parse_command(user_input, calendar, site_id, site_index, clock, PL, server, hosts):
     user_input = user_input.split()
     command = user_input[0]
+    command = command.lower()
     args = user_input[1:]
 
-    if command.lower() == "create" or command.lower() == "schedule":
+    if command == "create" or command == "schedule":
         schedule(args, calendar, clock, site_id, site_index, PL)
         participants = args[4:]
         if len(participants) == 1:
@@ -198,7 +193,7 @@ def parse_command(user_input, calendar, site_id, site_index, clock, PL, server, 
             if ct != site_index:
                 if ip in participants:                    
                     send_message(PL, clock, ip, server, ip, port)
-    elif command.lower() == "cancel":
+    elif command == "cancel":
         participants = []
         for item in calendar:          
             if item.name == args[0]:
@@ -215,13 +210,13 @@ def parse_command(user_input, calendar, site_id, site_index, clock, PL, server, 
             if ct != site_index:
                 if ip in participants:                    
                     send_message(PL, clock, ip, server, ip, port)
-    elif command.lower() == "view":
+    elif command == "view":
         view(calendar)
-    elif command.lower() == "myview":
+    elif command == "myview":
         myview(calendar, site_id)
-    elif command.lower() == "log":
+    elif command == "log":
         view_log(PL)
-    elif command.lower() == "clock":
+    elif command == "clock":
         print_matrix_clock(site_id, clock)
     else:
         print("ERROR: Invalid command.")
