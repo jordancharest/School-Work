@@ -264,6 +264,13 @@ def cancel(meeting, calendar, clock, site_id, site_index, PL):
     print("\nUser requested CANCEL")
     events = len(calendar)
 
+    # ensure that the user is a participant in that meeting
+    for event in calendar:
+        if event.name == meeting:
+            if site_id not in event.participants:
+                print("You cannot cancel a meeting you are not participating in.")
+                return calendar
+
     # modify the event list to remove the meeting
     calendar = [event for event in calendar if event.name != meeting]
     #print(calendar)
