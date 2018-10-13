@@ -1,6 +1,7 @@
 import sys
 from select import select
 import json
+import socket
 
 from UdpServer import UdpServer
 from event import Event
@@ -17,6 +18,18 @@ TODO:
         - has_received()
     - actual Wuu-Berntstein algorithm
 """
+
+# -----------------------------------------------------------------------------
+def get_site_index(site_id, hosts):
+    site_index = 0
+    for host in hosts:
+        site_index = site_index + 1
+        if host[0] == hostname:
+            site_id = str(ct)
+            ip = host[0]
+            port = host[1]
+            break
+    return site_index
 
 # -----------------------------------------------------------------------------
 def read_known_hosts():
@@ -41,16 +54,18 @@ def read_known_hosts():
                     # exit()
 
         # ensure our site ID is in the group of known hosts
-        ct = 0
-        for host in hosts:
-            ct = ct + 1
-            if ct == int(site_id):
-                ip = host[0]
-                port = host[1]
-                break
         else:
             print("Site ID must be contained in knownhosts_udp.txt")
             exit()
+            
+        # find the index of the host
+        site_index = 0
+        for host in hosts:
+            site_index = site_index + 1
+            if host[0] == site_id:
+                ip = host[0]
+                port = host[1]
+                break
 
         # build a matrix clock that includes all hosts,
         # an empty calendar, and assign sequential IDs
@@ -59,14 +74,14 @@ def read_known_hosts():
         calendar = []
         PL = []
         for i,host in enumerate(hosts):
-            clock[str(i+1)] = [0] * len(hosts)
+            clock[host[0]] = [0] * len(hosts)
 
     else:
         print("Invalid Argument(s)")
         print("USAGE: {0} <site-id>".format(sys.argv[0]))
         exit()
 
-    return site_id, ip, int(port), hosts, clock, calendar, PL
+    return site_id, site_index, ip, int(port), hosts, clock, calendar, PL
 
 # -----------------------------------------------------------------------------
 def print_matrix_clock(T):
@@ -97,7 +112,7 @@ def send_message(PL, clock, receiver_id, server, ip, port):
     server.send(json.dumps(msg), (ip, port))
     
 # -----------------------------------------------------------------------------
-def receive_message(data, address, calendar, receiver_id, clock, PL, hosts):
+def receive_message(data, address, calendar, receiver_id, receiver_index, clock, PL, hosts):
     # convert data
     data_dict = json.loads(data)
     Tk = data_dict['clock']
@@ -109,7 +124,7 @@ def receive_message(data, address, calendar, receiver_id, clock, PL, hosts):
     NE = []
     for fR in NP:
         #print(fR)
-        if not hasRec(clock, fR, int(receiver_id)):
+        if not hasRec(clock, fR, receiver_id):
             NE.append(fR)
     
     # update dictionary 
@@ -131,12 +146,18 @@ def receive_message(data, address, calendar, receiver_id, clock, PL, hosts):
     
     # host info
     n_hosts = 0
+    sender_id = None
+    sender_index = 0
     for host in hosts:
             n_hosts = n_hosts + 1
-            ip = host[0]
+            #print(host[0])
+            ip = socket.gethostbyname(host[0])
+            #print(ip)
             port = host[1]
+            #print(address[0])
             if  ip == address[0] and port == address[1]:
-                sender_id = n_hosts
+                sender_id = host[0]
+                sender_index = n_hosts
     
     # update matrix clock step 1
     for r in range(1,n_hosts):
@@ -145,7 +166,7 @@ def receive_message(data, address, calendar, receiver_id, clock, PL, hosts):
     # update matrix clock step 2
     for r in range(1,n_hosts):
         for s in range(1,n_hosts):
-            clock[str(r)][s-1] = max(clock[str(r)][s-1],int(Tk[str(r)][s-1]))
+            clock[hosts[r-1][0]][s-1] = max(clock[hosts[r-1][0]][s-1],int(Tk[hosts[r-1][0]][s-1]))
     
     # update the partial log 
     PL_temp = PL.copy()
@@ -154,7 +175,7 @@ def receive_message(data, address, calendar, receiver_id, clock, PL, hosts):
         #print(eR)
         flag = False
         for s in range (1,n_hosts):
-            if not hasRec(clock, eR, s):
+            if not hasRec(clock, eR, hosts[s-1][0]):
                 flag = True 
                 break
         if flag:
@@ -188,22 +209,22 @@ def has_received(clock, participant):
     pass
 
 # -----------------------------------------------------------------------------
-def parse_command(user_input, calendar, site_id, clock, PL, server, hosts):
+def parse_command(user_input, calendar, site_id, site_index, clock, PL, server, hosts):
     user_input = user_input.split()
     command = user_input[0]
     args = user_input[1:]
 
-    if command.lower() == "create":
-        schedule(args, calendar, clock, site_id, PL)
+    if command.lower() == "create" or command.lower() == "schedule":
+        schedule(args, calendar, clock, site_id, site_index, PL)
         participants = args[4:]
         if len(participants) == 1:
             participants = participants[0].split(",")
         ct = 0
         for ip, port in hosts: 
             ct = ct + 1         
-            if ct != int(site_id):
-                if str(ct) in participants:                    
-                    send_message(PL, clock, ct, server, ip, port)
+            if ct != site_index:
+                if ip in participants:                    
+                    send_message(PL, clock, ip, server, ip, port)
     elif command.lower() == "cancel":
         participants = []
         for item in calendar:          
@@ -215,14 +236,14 @@ def parse_command(user_input, calendar, site_id, clock, PL, server, hosts):
             
         #print(participants)    
             
-        calendar = cancel(args[0], calendar, clock, site_id, PL)
+        calendar = cancel(args[0], calendar, clock, site_id, site_index, PL)
         
         ct = 0
         for ip, port in hosts: 
             ct = ct + 1         
-            if ct != int(site_id):
-                if str(ct) in participants:                    
-                    send_message(PL, clock, ct, server, ip, port)
+            if ct != site_index:
+                if ip in participants:                    
+                    send_message(PL, clock, ip, server, ip, port)
     elif command.lower() == "view":
         view(calendar)
     elif command.lower() == "myview":
@@ -237,7 +258,7 @@ def parse_command(user_input, calendar, site_id, clock, PL, server, hosts):
     return(calendar)
 
 # -----------------------------------------------------------------------------
-def schedule(args, calendar, clock, site_id, PL):
+def schedule(args, calendar, clock, site_id, site_index, PL):
     print("\nUser requested SCHEDULE")
     name, day, start, end = args[0:4]
     participants = args[4:]
@@ -260,11 +281,11 @@ def schedule(args, calendar, clock, site_id, PL):
     else: # insert(x)
       
         # for now just increment the clock without checking to see if it was successful
-        clock[str(site_id)][int(site_id)-1] += 1
+        clock[str(site_id)][site_index-1] += 1
         #print_matrix_clock(clock)
         
         # update log
-        log("create", e, clock[str(site_id)][int(site_id)-1], int(site_id), PL)
+        log("create", e, clock[str(site_id)][site_index-1], site_index, PL)
         
         # add x to this site's schedule   
         calendar.append(e)
@@ -273,7 +294,7 @@ def schedule(args, calendar, clock, site_id, PL):
         
 
 # -----------------------------------------------------------------------------
-def cancel(meeting, calendar, clock, site_id, PL):
+def cancel(meeting, calendar, clock, site_id, site_index, PL):
     print("\nUser requested CANCEL")
     events = len(calendar)
 
@@ -284,9 +305,9 @@ def cancel(meeting, calendar, clock, site_id, PL):
     if events == len(calendar):
         print("No events were cancelled.")
     else:
-        clock[str(site_id)][int(site_id)-1] += 1
+        clock[str(site_id)][site_index-1] += 1
         print_matrix_clock(clock)
-        log("delete", meeting, clock[str(site_id)][int(site_id)-1], int(site_id), PL)
+        log("delete", meeting, clock[str(site_id)][site_index-1], site_index, PL)
         print("Meeting {0} cancelled.".format(meeting))
     return calendar
 
@@ -331,18 +352,19 @@ def view_log(PL):
 # -----------------------------------------------------------------------------
 def hasRec(Ti, eR, k):
     i,Ci,logEntry = eR.split(" ",2) 
+    #print(k)
     return Ti[str(k)][int(i)-1] >= int(Ci)
     
 
 # =============================================================================
 if __name__ == "__main__":
-    site_id, ip, port, hosts, clock, calendar, PL = read_known_hosts()
+    site_id, site_index, ip, port, hosts, clock, calendar, PL = read_known_hosts()
     print_matrix_clock(clock)
     
 
     # both server and poll for user input are non-blocking
     server = UdpServer(ip, port)
-    timeout = 0
+    timeout = 0.25
     
     
     # test by adding an event to the calendar and viewing it
@@ -368,7 +390,7 @@ if __name__ == "__main__":
         # attempt to receive any message
         data, address = server.receive()
         if data:
-            calendar = receive_message(data, address, calendar, site_id, clock, PL, hosts)
+            calendar = receive_message(data, address, calendar, site_id, site_index, clock, PL, hosts)
 
         # check for user input
         rlist, _, _ = select([sys.stdin], [], [], timeout)
@@ -378,4 +400,4 @@ if __name__ == "__main__":
                 print("Exiting.")
                 exit()
             else:
-                calendar = parse_command(command, calendar, site_id, clock, PL, server, hosts)
+                calendar = parse_command(command, calendar, site_id, site_index, clock, PL, server, hosts)

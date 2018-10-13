@@ -9,7 +9,8 @@ class UdpServer:
         self.host = host
         self.port = port
         self.sock.bind((self.host, self.port))
-        self.sock.setblocking(0)
+        self.sock.settimeout(0.25)
+        # self.sock.setblocking(0)
 
     def send(self, data, address):
         self.sock.sendto(pickle.dumps(data), address)
