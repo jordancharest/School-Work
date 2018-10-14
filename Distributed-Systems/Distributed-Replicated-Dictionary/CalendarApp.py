@@ -2,6 +2,7 @@ import sys
 from select import select
 import json
 import socket
+import os.path
 
 from UdpServer import UdpServer
 from event import Event
@@ -15,7 +16,7 @@ def read_known_hosts():
     """
     if len(sys.argv) == 2:
         _, site_id = sys.argv
-
+        
         # read all known hosts
         file = open("knownhosts_udp.txt", "r")
         hosts = []
@@ -41,7 +42,8 @@ def read_known_hosts():
                 ip = host[0]
                 port = host[1]
                 break
-
+        
+        
         # build a matrix clock that includes all hosts,
         # an empty calendar, and assign sequential IDs
         # to each site
@@ -50,6 +52,46 @@ def read_known_hosts():
         PL = []
         for i,host in enumerate(hosts):
             clock[host[0]] = [0] * len(hosts)
+            
+        # try load logs
+        f_log = "log_"+site_id+".txt"
+        f_calendar = "dict_"+site_id+".txt"
+        f_clock = "clock_"+site_id+".txt"
+        print(f_log)
+        print(os.path.isfile(f_log))
+        if os.path.isfile(f_log) and os.path.isfile(f_calendar) and os.path.isfile(f_clock):
+            f_log = open(f_log, "r")
+            f_calendar = open(f_calendar, "r")
+            f_clock = open(f_clock, "r")
+            char_rmv1 = str.maketrans(dict.fromkeys('\n'))
+            char_rmv2 = str.maketrans(dict.fromkeys('[] \n'))            
+            if f_log.mode == "r":
+                lines = f_log.readlines()
+                for line in lines:
+                    line = line.translate(char_rmv1)
+                    PL.append(line)
+                    
+            if f_calendar.mode == "r":
+                lines = f_calendar.readlines()
+                for line in lines:
+                    line = line.translate(char_rmv1)
+                    e = Event.load(line)
+                    calendar.append(e)
+                    print(e)
+                    
+            if f_clock.mode == "r":                
+                lines = f_clock.readlines()
+                for i,line in enumerate(lines):
+                    line = line.translate(char_rmv2)
+                    entries = line.split(",")
+                    for j,entry in enumerate(entries):
+                        clock[hosts[i][0]][j] = int(entry)
+                    
+            f_log.close()
+            f_calendar.close()
+            f_clock.close()
+        
+        
 
     else:
         print("Invalid Argument(s)")
@@ -85,7 +127,7 @@ def send_message(PL, clock, receiver_id, server, ip, port):
     server.send(json.dumps(msg), (ip, port))
     
 # -----------------------------------------------------------------------------
-def receive_message(data, address, calendar, receiver_id, receiver_index, clock, PL, hosts):
+def receive_message(data, address, calendar, receiver_id, receiver_index, clock, PL, server, hosts):
     # convert data
     data_dict = json.loads(data)
     Tk = data_dict['clock']
@@ -97,7 +139,10 @@ def receive_message(data, address, calendar, receiver_id, receiver_index, clock,
         if not hasRec(clock, fR, receiver_id):
             NE.append(fR)
     
-    # update dictionary 
+    # update dictionary
+    newEvents = NE 
+    oldEvents = {e for e in calendar}
+    oldEvents = list(oldEvents)
     for dR in NE:
         tmp0, tmp1, usr_cmd, meeting = dR.split(" ", 3)
         PL.append(dR)
@@ -147,7 +192,56 @@ def receive_message(data, address, calendar, receiver_id, receiver_index, clock,
                 break
         if flag:
             PL.append(eR) 
-    return calendar
+            
+            
+    # check if new events have a conflict
+    if usr_cmd == "create":
+        flag_conf = False
+        event_conf = []
+        for ne in newEvents:
+            tmp0, tmp1, usr_cmd, meeting = ne.split(" ", 3)                             
+            ne_e = Event.load(meeting)             
+            if not (ne_e in oldEvents):
+                n_participants = ne_e.participants
+                for oe_e in oldEvents:
+                    o_participants = oe_e.participants
+                    for n_line in n_participants:
+                        n_p = n_line.split(",")
+                        for o_line in o_participants:
+                            o_p = o_line.split(",")
+                            for n_i in n_p:
+                                if n_i == receiver_id:
+                                    if n_i in o_p:
+                                        if ne_e.date != oe_e.date:
+                                            break
+                                        elif ne_e.end <= oe_e.start:
+                                            break
+                                        elif ne_e.start >= oe_e.end:
+                                            break
+                                        else:# conflict
+                                            flag_conf = True
+                                            event_conf.append(ne_e)
+                                            event_conf.append(oe_e)
+                                            break
+        if flag_conf:
+            event_conf.sort()
+            event_cancel = event_conf[1]
+            # cancel an event
+            participants = event_cancel.participants             
+            if len(participants) == 1:
+                participants = participants[0].split(",")
+                                            
+            calendar = cancel(event_cancel.name, calendar, clock, receiver_id, receiver_index, PL)
+            
+            ct = 0
+            for ip, port in hosts: 
+                ct = ct + 1         
+                if ct != receiver_index:
+                    if ip in participants:                    
+                        send_message(PL, clock, ip, server, ip, port)  
+                        write_log(calendar, PL, clock, receiver_id, hosts)
+    
+    return calendar, PL
     # End of the function
 
 # -----------------------------------------------------------------------------
@@ -183,16 +277,18 @@ def parse_command(user_input, calendar, site_id, site_index, clock, PL, server, 
     args = user_input[1:]
 
     if command == "create" or command == "schedule":
-        schedule(args, calendar, clock, site_id, site_index, PL)
-        participants = args[4:]
-        if len(participants) == 1:
-            participants = participants[0].split(",")
-        ct = 0
-        for ip, port in hosts: 
-            ct = ct + 1         
-            if ct != site_index:
-                if ip in participants:                    
-                    send_message(PL, clock, ip, server, ip, port)
+        ret = schedule(args, calendar, clock, site_id, site_index, PL)
+        if ret:
+            participants = args[4:]
+            if len(participants) == 1:
+                participants = participants[0].split(",")
+            ct = 0
+            for ip, port in hosts: 
+                ct = ct + 1         
+                if ct != site_index:
+                    if ip in participants:                    
+                        send_message(PL, clock, ip, server, ip, port)
+                        write_log(calendar, PL, clock, site_id, hosts)
     elif command == "cancel":
         participants = []
         for item in calendar:          
@@ -202,14 +298,16 @@ def parse_command(user_input, calendar, site_id, site_index, clock, PL, server, 
         if len(participants) == 1:
             participants = participants[0].split(",")
                         
-        calendar = cancel(args[0], calendar, clock, site_id, site_index, PL)
+        calendar, ret = cancel(args[0], calendar, clock, site_id, site_index, PL)
         
-        ct = 0
-        for ip, port in hosts: 
-            ct = ct + 1         
-            if ct != site_index:
-                if ip in participants:                    
-                    send_message(PL, clock, ip, server, ip, port)
+        if ret:
+            ct = 0
+            for ip, port in hosts: 
+                ct = ct + 1         
+                if ct != site_index:
+                    if ip in participants:                    
+                        send_message(PL, clock, ip, server, ip, port)
+                        write_log(calendar, PL, clock, site_id, hosts)
     elif command == "view":
         view(calendar)
     elif command == "myview":
@@ -226,6 +324,7 @@ def parse_command(user_input, calendar, site_id, site_index, clock, PL, server, 
 # -----------------------------------------------------------------------------
 def schedule(args, calendar, clock, site_id, site_index, PL):
     print("\nUser requested SCHEDULE")
+    flag_succ = False
     name, day, start, end = args[0:4]
     participants = args[4:]
 
@@ -256,18 +355,27 @@ def schedule(args, calendar, clock, site_id, site_index, PL):
         # add x to this site's schedule   
         calendar.append(e)
         calendar.sort()
+        flag_succ = True
+        
+    return flag_succ
+        
         
         
 
 # -----------------------------------------------------------------------------
 def cancel(meeting, calendar, clock, site_id, site_index, PL):
     print("\nUser requested CANCEL")
+    flag_succ = False
     events = len(calendar)
 
     # ensure that the user is a participant in that meeting
     for event in calendar:
         if event.name == meeting:
-            if site_id not in event.participants:
+            participants = event.participants
+            if len(participants) == 1:
+                participants = participants[0].split(",")
+            
+            if site_id not in participants:
                 print("You cannot cancel a meeting you are not participating in.")
                 return calendar
 
@@ -281,6 +389,7 @@ def cancel(meeting, calendar, clock, site_id, site_index, PL):
         clock[str(site_id)][site_index-1] += 1
         print_matrix_clock(site_id, clock)
         log("delete", meeting, clock[str(site_id)][site_index-1], site_index, PL)
+        flag_succ = True
         print("Meeting {0} cancelled.".format(meeting))
     return calendar
 
@@ -328,6 +437,44 @@ def hasRec(Ti, eR, k):
     #print(k)
     return Ti[str(k)][int(i)-1] >= int(Ci)
     
+# -----------------------------------------------------------------------------
+def write_log(calendar, PL, clock, site_id, hosts):
+    f_log = open("log_"+site_id+".txt","w+")
+    f_calendar = open("dict_"+site_id+".txt","w+")
+    f_clock = open("clock_"+site_id+".txt","w+")
+    
+    f_log.write("")
+    f_calendar.write("")
+    f_clock.write("")
+    
+    f_log.close()
+    f_calendar.close()
+    f_clock.close()
+    
+    f_log = open("log_"+site_id+".txt","a")
+    f_calendar = open("dict_"+site_id+".txt","a")
+    f_clock = open("clock_"+site_id+".txt","a")
+    
+    if f_log.mode == "a":
+        for line in PL:
+            f_log.write(line + "\n")
+            
+    if f_calendar.mode == "a":        
+        events = {e for e in calendar}
+        events = list(events)
+        # sort in lexicographical order and print all
+        events.sort()
+        for e in events:
+            f_calendar.write(str(e) + "\n")
+            
+    if f_clock.mode == "a":
+        for i,host in enumerate(hosts):
+            f_clock.write(str(clock[host[0]]) + "\n")
+    
+    f_log.close()
+    f_calendar.close()
+    f_clock.close()
+    
 
 # =============================================================================
 if __name__ == "__main__":
@@ -363,7 +510,8 @@ if __name__ == "__main__":
         # attempt to receive any message
         data, address = server.receive()
         if data:
-            calendar = receive_message(data, address, calendar, site_id, site_index, clock, PL, hosts)
+            calendar, PL = receive_message(data, address, calendar, site_id, site_index, clock, PL, server, hosts)
+            write_log(calendar, PL, clock, site_id, hosts)
 
         # check for user input
         rlist, _, _ = select([sys.stdin], [], [], timeout)
