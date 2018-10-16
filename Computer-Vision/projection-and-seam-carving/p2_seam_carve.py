@@ -115,17 +115,19 @@ def remove_seam(img, seam):
 
 # -----------------------------------------------------------------------------
 def output(i, img, seam, rotated, avg_energy):
-    if i == 0:
-        for j, index in enumerate(seam):
-            print("Writing on image at", j, index)
+    # if i == 0:
+        # for j, index in enumerate(seam):
+            # print("Writing on image at", j, index)
     
 
     print("\nPoints on seam {0}:".format(i))
     if rotated:
         print("horizontal")
+        print("{0}, {1}".format(seam[0], 0))
     else:
         print("vertical")
-    print("{0}, {1}".format(0, seam[0]))
+        print("{0}, {1}".format(0, seam[0]))
+        
     print("{0}, {1}".format(img.shape[0] // 2, seam[img.shape[0] // 2]))
     print("{0}, {1}".format(img.shape[0]-1, seam[img.shape[0]-1]))
     print("Energy of seam {0}: {1:.2f}".format(i, avg_energy))
