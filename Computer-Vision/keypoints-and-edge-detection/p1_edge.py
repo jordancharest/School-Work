@@ -74,31 +74,23 @@ def gradient_direction_image(magnitude, direction, filename, ext, shape):
     """
 
     result = np.zeros(shape)
-    print(magnitude.shape)
-    magnitude[magnitude < 1.0] = 0
 
 
-
-    # add pi/8 to rotate the color wheel so east starts at 0
-    # instead of -pi/8
-    # direction //= m.pi/8
-    # direction = direction//2
-
-
+    direction[direction < 0] += m.pi
     direction += m.pi/8
 
     direction //= m.pi/4
     direction %= 4
 
     red = direction == 0
-    white = direction == 1
+    green = direction == 1
     blue = direction == 2
-    green = direction == 3
+    white = direction == 3
 
     # assign the colors
-    # result[red] = (0,0,255)
-    # result[white] = (255,255,255)
-    # result[blue] = (255,0,0)
+    result[red] = (0,0,255)
+    result[white] = (255,255,255)
+    result[blue] = (255,0,0)
     result[green] = (0,255,0)
 
     result[magnitude < 1.0] = (0,0,0)
