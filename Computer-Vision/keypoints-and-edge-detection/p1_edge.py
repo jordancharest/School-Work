@@ -73,6 +73,9 @@ def gradient_direction(magnitude, direction, filename, ext, shape):
     magnitude < 1.0     : black
     """
 
+
+    # TODO
+    # ASSIGN BORDER VALUES TO 0
     magnitude[magnitude < 1.0] = 0
     result = np.zeros(shape)
 
@@ -95,9 +98,6 @@ def gradient_direction(magnitude, direction, filename, ext, shape):
     result[np.nonzero(blue)] = (255,0,0)
     result[np.nonzero(green)] = (0,255,0)
 
-    # TODO
-    # ASSIGN BORDER VALUES TO 0
-
     cv2.imwrite(filename + "_dir." + ext, result)
 
     return red, white, blue, green
@@ -110,10 +110,10 @@ def non_max_suppression(mag, E_W, NE_SW, N_S, NW_SE):
     NE_SW = NE_SW[1:-1, 1:-1]
     N_S = N_S[1:-1, 1:-1]
     NW_SE = NW_SE[1:-1, 1:-1]
-    # print(E_W)
-
+    print(E_W)
 
     # create shifted images to threshold the gradient magnitude with
+    # not memory efficient but code readability greatly increases
     up = mag[2:, 1:-1]
     down = mag[:-2, 1:-1]
     left = mag[1:-1, 2:]
@@ -123,31 +123,29 @@ def non_max_suppression(mag, E_W, NE_SW, N_S, NW_SE):
     down_right = mag[:-2, :-2]
     down_left = mag[:-2, 2:]
 
+
+    # threshold each direction separately; if pixel is greater than both
+    # of its neighbors(shifted to align) then pixel = 1, otherwise 0
     result = np.zeros(E_W.shape)
-
-    # threshold each direction separately
-    result[E_W >= left] = 1
-    result[E_W >= right] = 1
-
-    result[NE_SW >= down_left] = 1
-    result[NE_SW >= up_right] = 1
-
-    result[N_S >= up] = 1
-    result[N_S >= down] = 1
-
-    result[NW_SE >= up_left] = 1
-    result[NW_SE >= down_right] = 1
-
-    print("\nMag: \n", mag)
-    print("\nE/W: \n", E_W)
-    print("\nNE/SW: \n", NE_SW)
-    print("\nN/S: \n", N_S)
-    print("\nNW/SE: \n", NW_SE)
+    result += np.where((E_W >= left) & (E_W >= right), 1, 0)
+    result += np.where((NE_SW >= down_left) & (NE_SW >= up_right), 1, 0)
+    result += np.where((N_S >= up) & (N_S >= down), 1, 0)
+    result += np.where((NW_SE >= up_left) & (NW_SE >= down_right), 1, 0)
 
     mag[1:-1, 1:-1] *= result
-    print(mag)
 
     return mag
+
+# -----------------------------------------------------------------------------
+def edge_threshold(mag, sigma):
+    mu = np.mean(mag)
+    s = np.std(mag)
+
+    threshold = min(30/sigma, mu + 0.5*s)
+    mag[mag < threshold] = 0
+
+    return mag
+
 
 # =============================================================================
 if __name__ == "__main__":
@@ -162,17 +160,14 @@ if __name__ == "__main__":
     grad_output = (grad_magnitude / np.max(grad_magnitude)) * 255
     cv2.imwrite(img_name + "_grd." + ext, grad_output)
 
-    # encode the gradient direction into 4 different bins
-    # and write to disk
+    # separate the gradient direction into 4 different bins, 45 degrees each
     E_W, NE_SW, N_S, NW_SE = gradient_direction(grad_magnitude, grad_direction, 
                                                 img_name, ext, img.shape)
 
-
-
+    # attempt to trim edges to a single pixel wide and remove spurious detections
     grad_magnitude = non_max_suppression(grad_magnitude, E_W, NE_SW, N_S, NW_SE)
+    grad_magnitude = edge_threshold(grad_magnitude, sigma)
+
+    # normalize from 0-255
     grad_output = (grad_magnitude / np.max(grad_magnitude)) * 255
-    cv2.imwrite(img_name + "_non_max." + ext, grad_output)
-
-
-
-
+    cv2.imwrite(img_name + "_thr." + ext, grad_output)
