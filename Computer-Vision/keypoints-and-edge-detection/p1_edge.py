@@ -63,7 +63,7 @@ def calculate_gradients(img, sigma=1.0):
     return gradient_magnitude, gradient_direction
 
 # -----------------------------------------------------------------------------
-def gradient_direction_image(magnitude, direction, filename, ext, shape):
+def gradient_direction(magnitude, direction, filename, ext, shape):
     """
     east/west           : red
     north/south         : blue
@@ -75,17 +75,22 @@ def gradient_direction_image(magnitude, direction, filename, ext, shape):
 
     result = np.zeros(shape)
 
-
-    direction[direction < 0] += m.pi
+    # rotate so that the boundary between red and green is at 0
     direction += m.pi/8
 
-    direction //= m.pi/4
+    # separate into 4 bins
+    direction //= (m.pi/4)
     direction %= 4
 
+    # define masks for each bin/color
     red = direction == 0
+    red[magnitude < 1.0] = 0
     green = direction == 1
+    green[magnitude < 1.0] = 0
     blue = direction == 2
+    blue[magnitude < 1.0] = 0
     white = direction == 3
+    white[magnitude < 1.0] = 0
 
     # assign the colors
     result[red] = (0,0,255)
@@ -93,13 +98,63 @@ def gradient_direction_image(magnitude, direction, filename, ext, shape):
     result[blue] = (255,0,0)
     result[green] = (0,255,0)
 
-    result[magnitude < 1.0] = (0,0,0)
+    # magnitude threshold
+    # result[magnitude < 1.0] = (0,0,0)
+
+
+    # TODO
+    # ASSIGN BORDER VALUES TO 0
 
     cv2.imwrite(filename + "_dir." + ext, result)
 
+    return red, white, blue, green
+
+# -----------------------------------------------------------------------------
+def non_max_suppression(mag, E_W, NE_SW, N_S, NW_SE):
+
+    # remove the border of gradient direction images
+    E_W = E_W[1:-1, 1:-1]
+    NE_SW = NE_SW[1:-1, 1:-1]
+    N_S = N_S[1:-1, 1:-1]
+    NW_SE = NW_SE[1:-1, 1:-1]
+    print(E_W)
 
 
+    # create shifted images to threshold the gradient magnitude with
+    up = mag[2:, 1:-1]
+    down = mag[:-2, 1:-1]
+    left = mag[1:-1, 2:]
+    right = mag[1:-1, :-2]
+    up_right = mag[2:, :-2]
+    up_left = mag[2:, 2:]
+    down_right = mag[:-2, :-2]
+    down_left = mag[:-2, 2:]
 
+    result = np.zeros(E_W.shape)
+
+    # threshold each direction separately
+    result[E_W >= left] = 1
+    result[E_W >= right] = 1
+
+    result[NE_SW >= down_left] = 1
+    result[NE_SW >= up_right] = 1
+
+    result[N_S >= up] = 1
+    result[N_S >= down] = 1
+
+    result[NW_SE >= up_left] = 1
+    result[NW_SE >= down_right] = 1
+
+    print("\nMag: \n", mag)
+    print("\nE/W: \n", E_W)
+    print("\nNE/SW: \n", NE_SW)
+    print("\nN/S: \n", N_S)
+    print("\nNW/SE: \n", NW_SE)
+
+    mag[1:-1, 1:-1] *= result
+    print(mag)
+
+    return mag
 
 # =============================================================================
 if __name__ == "__main__":
@@ -110,6 +165,21 @@ if __name__ == "__main__":
     # smooth and calculate gradient magnitude and direction
     grad_magnitude, grad_direction = calculate_gradients(gray, sigma)
 
-    # encode the gradient direction into 5 different color bins
+    # gradient magnitude, converted to scale 0-255
+    grad_output = (grad_magnitude / np.max(grad_magnitude)) * 255
+    cv2.imwrite(img_name + "_grd." + ext, grad_output)
+
+    # encode the gradient direction into 4 different bins
     # and write to disk
-    gradient_direction_image(grad_magnitude, grad_direction, img_name, ext, img.shape)
+    E_W, NE_SW, N_S, NW_SE = gradient_direction(grad_magnitude, grad_direction, 
+                                                img_name, ext, img.shape)
+
+
+
+    grad_magnitude = non_max_suppression(grad_magnitude, E_W, NE_SW, N_S, NW_SE)
+    grad_output = (grad_magnitude / np.max(grad_magnitude)) * 255
+    cv2.imwrite(img_name + "_non_max." + ext, grad_output)
+
+
+
+
