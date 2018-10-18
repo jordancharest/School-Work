@@ -73,34 +73,27 @@ def gradient_direction(magnitude, direction, filename, ext, shape):
     magnitude < 1.0     : black
     """
 
+    magnitude[magnitude < 1.0] = 0
     result = np.zeros(shape)
 
     # rotate so that the boundary between red and green is at 0
     direction += m.pi/8
 
-    # separate into 4 bins
+    # separate into 4 bins, 45 degrees each
     direction //= (m.pi/4)
     direction %= 4
 
     # define masks for each bin/color
-    red = direction == 0
-    red[magnitude < 1.0] = 0
-    green = direction == 1
-    green[magnitude < 1.0] = 0
-    blue = direction == 2
-    blue[magnitude < 1.0] = 0
-    white = direction == 3
-    white[magnitude < 1.0] = 0
+    red = np.where(direction == 0, magnitude, 0)
+    green = np.where(direction == 1, magnitude, 0)
+    blue = np.where(direction == 2, magnitude, 0)
+    white = np.where(direction == 3, magnitude, 0)
 
     # assign the colors
-    result[red] = (0,0,255)
-    result[white] = (255,255,255)
-    result[blue] = (255,0,0)
-    result[green] = (0,255,0)
-
-    # magnitude threshold
-    # result[magnitude < 1.0] = (0,0,0)
-
+    result[np.nonzero(red)] = (0,0,255)
+    result[np.nonzero(white)] = (255,255,255)
+    result[np.nonzero(blue)] = (255,0,0)
+    result[np.nonzero(green)] = (0,255,0)
 
     # TODO
     # ASSIGN BORDER VALUES TO 0
@@ -117,7 +110,7 @@ def non_max_suppression(mag, E_W, NE_SW, N_S, NW_SE):
     NE_SW = NE_SW[1:-1, 1:-1]
     N_S = N_S[1:-1, 1:-1]
     NW_SE = NW_SE[1:-1, 1:-1]
-    print(E_W)
+    # print(E_W)
 
 
     # create shifted images to threshold the gradient magnitude with
