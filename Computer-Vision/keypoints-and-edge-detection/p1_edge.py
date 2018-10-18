@@ -56,8 +56,57 @@ def calculate_gradients(img, sigma=1.0):
     ky = ky/2
     x_gradient = cv2.filter2D(blurred, -1, kx)
     y_gradient = cv2.filter2D(blurred, -1, ky)
+
     gradient_magnitude = np.sqrt(x_gradient**2 + y_gradient**2)
-    return gradient_magnitude
+    gradient_direction = np.arctan2(y_gradient, x_gradient)
+
+    return gradient_magnitude, gradient_direction
+
+# -----------------------------------------------------------------------------
+def gradient_direction_image(magnitude, direction, filename, ext, shape):
+    """
+    east/west           : red
+    north/south         : blue
+    northeast/southwest : white
+    northwest/southeast : green
+    image borders       : black
+    magnitude < 1.0     : black
+    """
+
+    result = np.zeros(shape)
+    print(magnitude.shape)
+    magnitude[magnitude < 1.0] = 0
+
+
+
+    # add pi/8 to rotate the color wheel so east starts at 0
+    # instead of -pi/8
+    # direction //= m.pi/8
+    # direction = direction//2
+
+
+    direction += m.pi/8
+
+    direction //= m.pi/4
+    direction %= 4
+
+    red = direction == 0
+    white = direction == 1
+    blue = direction == 2
+    green = direction == 3
+
+    # assign the colors
+    # result[red] = (0,0,255)
+    # result[white] = (255,255,255)
+    # result[blue] = (255,0,0)
+    result[green] = (0,255,0)
+
+    result[magnitude < 1.0] = (0,0,0)
+
+    cv2.imwrite(filename + "_dir." + ext, result)
+
+
+
 
 
 # =============================================================================
@@ -66,4 +115,9 @@ if __name__ == "__main__":
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(float)
     print(gray.dtype)
 
-    gradient = calculate_gradients(gray, sigma)
+    # smooth and calculate gradient magnitude and direction
+    grad_magnitude, grad_direction = calculate_gradients(gray, sigma)
+
+    # encode the gradient direction into 5 different color bins
+    # and write to disk
+    gradient_direction_image(grad_magnitude, grad_direction, img_name, ext, img.shape)
