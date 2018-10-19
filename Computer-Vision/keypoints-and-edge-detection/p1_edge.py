@@ -72,11 +72,6 @@ def gradient_direction(magnitude, direction, filename, ext, shape):
     image borders       : black
     magnitude < 1.0     : black
     """
-
-
-    # TODO
-    # ASSIGN BORDER VALUES TO 0
-    magnitude[magnitude < 1.0] = 0
     result = np.zeros(shape)
 
     # rotate so that the boundary between red and green is at 0
@@ -97,6 +92,7 @@ def gradient_direction(magnitude, direction, filename, ext, shape):
     result[np.nonzero(white)] = (255,255,255)
     result[np.nonzero(blue)] = (255,0,0)
     result[np.nonzero(green)] = (0,255,0)
+    result[magnitude < 1.0] = 0
 
     cv2.imwrite(filename + "_dir." + ext, result)
 
@@ -110,7 +106,6 @@ def non_max_suppression(mag, E_W, NE_SW, N_S, NW_SE):
     NE_SW = NE_SW[1:-1, 1:-1]
     N_S = N_S[1:-1, 1:-1]
     NW_SE = NW_SE[1:-1, 1:-1]
-    print(E_W)
 
     # create shifted images to threshold the gradient magnitude with
     # not memory efficient but code readability greatly increases
@@ -131,6 +126,7 @@ def non_max_suppression(mag, E_W, NE_SW, N_S, NW_SE):
     result += np.where((NE_SW >= down_left) & (NE_SW >= up_right), 1, 0)
     result += np.where((N_S >= up) & (N_S >= down), 1, 0)
     result += np.where((NW_SE >= up_left) & (NW_SE >= down_right), 1, 0)
+    result = np.where(result > 0, 1, 0)
 
     mag[1:-1, 1:-1] *= result
 
@@ -138,11 +134,19 @@ def non_max_suppression(mag, E_W, NE_SW, N_S, NW_SE):
 
 # -----------------------------------------------------------------------------
 def edge_threshold(mag, sigma):
-    mu = np.mean(mag)
-    s = np.std(mag)
-
+    print("Number after non-maximum:", np.count_nonzero(mag))
+    mag[mag < 1.0] = 0
+    mu = np.mean(mag[mag > 0])
+    s = np.std(mag[mag > 0])
     threshold = min(30/sigma, mu + 0.5*s)
+
+    print("Number after 1.0 threshold:", np.count_nonzero(mag))
+    print("Average: {0:.2f}".format(mu))
+    print("Std dev: {0:.2f}".format(s))
+    print("Threshold: {0:.2f}".format(threshold))
+
     mag[mag < threshold] = 0
+    print("Number after threshold:", np.count_nonzero(mag))
 
     return mag
 
@@ -151,13 +155,18 @@ def edge_threshold(mag, sigma):
 if __name__ == "__main__":
     sigma, img, img_name, ext = arg_parse()
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(float)
-    print(gray.dtype)
 
     # smooth and calculate gradient magnitude and direction
     grad_magnitude, grad_direction = calculate_gradients(gray, sigma)
 
     # gradient magnitude, converted to scale 0-255
     grad_output = (grad_magnitude / np.max(grad_magnitude)) * 255
+    
+    # suppress borders
+    grad_output[0, :] = 0
+    grad_output[-1, :] = 0
+    grad_output[:, 0] = 0
+    grad_output[:, -1] = 0
     cv2.imwrite(img_name + "_grd." + ext, grad_output)
 
     # separate the gradient direction into 4 different bins, 45 degrees each
