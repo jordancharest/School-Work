@@ -5,6 +5,14 @@ import math as m
 
 import numpy as np
 import cv2
+
+# TODO:
+# output the harris and SIFT keypoints on gray image with correct filename,
+# e.g. wisconsin_SIFT.jpg, wisconsin_harris.jpg
+
+
+
+
 # -----------------------------------------------------------------------------
 def arg_parse():
     if len(argv) == 3:
@@ -127,14 +135,44 @@ def extract_harris_keypoints(original, img_harris, sigma, apply_threshold=False)
     cv2.imwrite("Keypoints.jpg", out_img)
     # plot_pics( [img_harris, out_img], 1, ['Harris Measure', 'Keypoints shown'] )
 
+    return harris_keypoints
+
+# -----------------------------------------------------------------------------
+def extract_SIFT_keypoints(img,):
+    sift = cv2.xfeatures2d.SIFT_create()
+    kp = sift.detect(img, None)
+
+    print(type(kp))
+    print(len(kp))
+    kp.sort( key = lambda k: k.response)
+    kp = kp[::-1]
+    out_img = cv2.drawKeypoints(img.astype(np.uint8), kp, None)
+    # ipu.show_with_pixel_values(out_img)
+
+    '''
+    The SIFT result includes many keypoints at the same location, but with different orientations.
+    This filters out the keypoints down to just one per location.  In matching keypoints between
+    images, this filtering is not a good idea because each orientation will create a different
+    descriptor.
+    '''
+    kp_unique = [kp[0]]
+    for k in kp[1:]:
+        if k.pt != kp_unique[-1].pt:
+            kp_unique.append( k )
+
+    print(len(kp_unique))
+    # for k in kp_unique:
+        # print(k.response, k.pt, k.angle, k.size)
+
+
+
 # =============================================================================
 if __name__ == "__main__":
     sigma, gray, img_name, ext = arg_parse()
 
     img_harris = harris_measure(gray, sigma)
-    extract_harris_keypoints(gray, img_harris, sigma)
+    harris_keypoints = extract_harris_keypoints(gray, img_harris, sigma)
+    extract_SIFT_keypoints(gray)
 
 
 
-
-    sift = cv2.xfeatures2d.SIFT_create()
