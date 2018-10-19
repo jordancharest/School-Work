@@ -13,7 +13,7 @@ def arg_parse():
         # extract image name and read it
         _, filename = ntpath.split(path_to_img)
         filename, ext = filename.split(".")
-        img = cv2.imread(path_to_img, cv2.IMREAD_COLOR)
+        img = cv2.imread(path_to_img, cv2.IMREAD_GRAYSCALE)
 
         return float(sigma), img, filename, ext
 
@@ -78,19 +78,61 @@ def harris_measure(img, sigma):
     img_harris = determinant - kappa*trace*trace
 
     # grayscale normalization
-    im_harris /= np.max(im_harris)
-    im_harris *= 255
+    img_harris = 255 * (img_harris - np.min(img_harris)) / (np.max(img_harris) - np.min(img_harris))
+
     cv2.imwrite("Harris.png", img_harris)
     # plot_pics( [im, im_harris], 1, ['Original', 'Harris'] )
 
+    return img_harris
+
+# -----------------------------------------------------------------------------
+def extract_harris_keypoints(original, img_harris, sigma, apply_threshold=False):
+    # Compute a thresholded one the Harris measure by extracting the Harris 
+    # image intensities, sorting them, and setting the threshold so that a 
+    # small percentage of the points could pass
+    values = np.sort(img_harris,axis=None)
+    threshold_frac = 0.25
+    threshold_index = int((1-threshold_frac)*len(values))
+    threshold = values[threshold_index]
+    rv,thresholded = cv2.threshold(img_harris.astype(np.uint8),threshold,1,cv2.THRESH_BINARY)
+
+    # form structuring kernel and dilate
+    max_dist = int(2*sigma)
+    kernel = np.ones((2*max_dist+1, 2*max_dist+1), np.uint8)
+    img_harris = img_harris.astype(np.uint8)
+    dilated = cv2.dilate(img_harris, kernel)
+
+    # Comparing the dilated image to the Harris image will preserve only those
+    # locations that are peaks (non-maximum suppression)
+    harris_peaks = img_harris >= dilated
+
+    # Multiplying by the thresholded image keeps only peaks above the threshold
+    # or multiply by the original to keep all peaks
+    if apply_threshold:
+        harris_peaks = harris_peaks * thresholded
+    else:
+        harris_peaks = harris_peaks * img_harris
+
+    # Extract all indices of the peaks and build keypoint list
+    ys, xs = np.where(harris_peaks > 0)
+    kp_size = 4*sigma
+    harris_keypoints = [
+        cv2.KeyPoint(xs[i], ys[i], kp_size)
+        for i in range(len(xs))
+    ]
+
+    print("We have", len(harris_keypoints), "keypoints.")
+
+    out_img = cv2.drawKeypoints(original.astype(np.uint8), harris_keypoints, None)
+    cv2.imwrite("Keypoints.jpg", out_img)
+    # plot_pics( [img_harris, out_img], 1, ['Harris Measure', 'Keypoints shown'] )
 
 # =============================================================================
 if __name__ == "__main__":
-    sigma, img, img_name, ext = arg_parse()
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    sigma, gray, img_name, ext = arg_parse()
 
-    harris_img = harris_measure(gray, sigma)
-
+    img_harris = harris_measure(gray, sigma)
+    extract_harris_keypoints(gray, img_harris, sigma)
 
 
 
