@@ -147,7 +147,6 @@ def extract_SIFT_keypoints(img,):
     kp.sort( key = lambda k: k.response)
     kp = kp[::-1]
     out_img = cv2.drawKeypoints(img.astype(np.uint8), kp, None)
-    # ipu.show_with_pixel_values(out_img)
 
     '''
     The SIFT result includes many keypoints at the same location, but with different orientations.
