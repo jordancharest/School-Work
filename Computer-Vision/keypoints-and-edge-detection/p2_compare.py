@@ -73,10 +73,11 @@ def harris_measure(img, sigma):
     dx_dy = cv2.GaussianBlur(dx_dy, h_ksize, h_sigma)
 
     # Compute the Harris measure
+    # trace^2?
     kappa = 0.004
     determinant = dx_squared*dy_squared - dx_dy*dx_dy
     trace = dx_squared + dy_squared
-    img_harris = determinant - kappa*trace*trace
+    img_harris = determinant - kappa*trace  #*trace
 
     # grayscale normalization
     img_harris = 255 * (img_harris - np.min(img_harris)) /  \
