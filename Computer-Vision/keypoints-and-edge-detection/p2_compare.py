@@ -6,13 +6,6 @@ import math as m
 import numpy as np
 import cv2
 
-# TODO:
-# output the harris and SIFT keypoints on gray image with correct filename,
-# e.g. wisconsin_SIFT.jpg, wisconsin_harris.jpg
-
-
-
-
 # -----------------------------------------------------------------------------
 def arg_parse():
     if len(argv) == 3:
@@ -86,15 +79,17 @@ def harris_measure(img, sigma):
     img_harris = determinant - kappa*trace*trace
 
     # grayscale normalization
-    img_harris = 255 * (img_harris - np.min(img_harris)) / (np.max(img_harris) - np.min(img_harris))
+    img_harris = 255 * (img_harris - np.min(img_harris)) /  \
+                        (np.max(img_harris) - np.min(img_harris))
 
-    cv2.imwrite("Harris.png", img_harris)
+    # cv2.imwrite("Harris.png", img_harris)
     # plot_pics( [im, im_harris], 1, ['Original', 'Harris'] )
 
     return img_harris
 
 # -----------------------------------------------------------------------------
-def extract_harris_keypoints(original, img_harris, sigma, apply_threshold=False):
+def extract_harris_keypoints(original, img_harris, sigma, img_name, ext,
+                             apply_threshold=False):
     # Compute a thresholded one the Harris measure by extracting the Harris 
     # image intensities, sorting them, and setting the threshold so that a 
     # small percentage of the points could pass
@@ -136,14 +131,14 @@ def extract_harris_keypoints(original, img_harris, sigma, apply_threshold=False)
         for i in range(len(xs))
     ]
 
-    # print("We have", len(harris_keypoints), "keypoints.")
-
-    out_img = cv2.drawKeypoints(original.astype(np.uint8), harris_keypoints, None)
-    cv2.imwrite("Keypoints.jpg", out_img)
-
     # sort by keypoint response, largest first
     harris_keypoints.sort( key = lambda k: k.response)
     harris_keypoints = harris_keypoints[::-1]
+
+    index = min(len(harris_keypoints), 200)
+    out_img = cv2.drawKeypoints(original.astype(np.uint8), harris_keypoints[:index], None)
+    cv2.imwrite(img_name + "_harris." + ext, out_img)
+
 
     print("\nTop 10 Harris keypoints:")
     for i,k in enumerate(harris_keypoints[:10]):
@@ -154,7 +149,7 @@ def extract_harris_keypoints(original, img_harris, sigma, apply_threshold=False)
     return harris_keypoints
 
 # -----------------------------------------------------------------------------
-def extract_SIFT_keypoints(img, sigma):
+def extract_SIFT_keypoints(img, sigma, img_name, ext):
     sift = cv2.xfeatures2d.SIFT_create()
     kp = sift.detect(img, None)
 
@@ -173,6 +168,11 @@ def extract_SIFT_keypoints(img, sigma):
     for k in kp[1:]:
         if (not kp_unique or k.pt != kp_unique[-1].pt) and k.size <= 3*sigma:
             kp_unique.append( k )
+
+    index = min(len(kp_unique), 200)
+    out_img = cv2.drawKeypoints(img.astype(np.uint8), kp_unique[:index], None)
+    cv2.imwrite(img_name + "_sift." + ext, out_img)
+
 
     print("\nTop 10 SIFT keypoints:")
     for i, k in enumerate(kp_unique[:10]):
@@ -198,6 +198,7 @@ def keypoint_match(set1, set2, set1_name, set2_name):
         for j in range(last_set2):
             distance = m.sqrt((set1[i].pt[0] - set2[j].pt[0])**2 + \
                               (set1[i].pt[1] - set2[j].pt[1])**2)
+
             if distance < min_distance:
                 min_distance = distance
                 min_rank = abs(i-j)
@@ -224,7 +225,7 @@ if __name__ == "__main__":
     sigma, gray, img_name, ext = arg_parse()
 
     img_harris = harris_measure(gray, sigma)
-    harris_keypoints = extract_harris_keypoints(gray, img_harris, sigma)
-    SIFT_keypoints = extract_SIFT_keypoints(gray, sigma)
+    harris_keypoints = extract_harris_keypoints(gray, img_harris, sigma, img_name, ext)
+    SIFT_keypoints = extract_SIFT_keypoints(gray, sigma, img_name, ext)
     keypoint_match(harris_keypoints, SIFT_keypoints, "Harris", "SIFT")
     keypoint_match(SIFT_keypoints, harris_keypoints, "SIFT", "Harris")
