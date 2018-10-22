@@ -36,13 +36,13 @@ def calculate_gradients(img, sigma=1.0):
     # i.e. smooth the magnitude with sigma_v == 2 * sigma
     sigma_v = 2*sigma
     ksize = (int(4*sigma_v+1), int(4*sigma_v+1))
-    weight = cv2.GaussianBlur(magnitude, ksize, sigma_v)
+    weight = cv2.GaussianBlur(gradient_magnitude, ksize, sigma_v)
 
     return gradient_magnitude, gradient_direction, weight
 
 # -----------------------------------------------------------------------------
 def orientation_voting(weight, magnitude, direction, sigma):
-
+    pass
     # separate the weight into the two orientation bins that it is closest
     # to using linear interpolation
 
@@ -54,4 +54,4 @@ if __name__ == "__main__":
     print(pts)
 
     for pt in pts:
-        orientation_voting(weight, magnitude, direction, sigma)
+        histogram = orientation_voting(weight, magnitude, direction, sigma)
