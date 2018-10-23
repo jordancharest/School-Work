@@ -118,7 +118,6 @@ def non_max_suppression(mag, E_W, NE_SW, N_S, NW_SE):
     down_right = mag[:-2, :-2]
     down_left = mag[:-2, 2:]
 
-
     # threshold each direction separately; if pixel is greater than both
     # of its neighbors(shifted to align) then pixel = 1, otherwise 0
     result = np.zeros(E_W.shape)
@@ -149,7 +148,6 @@ def edge_threshold(mag, sigma):
     print("Number after threshold:", np.count_nonzero(mag))
 
     return mag
-
 
 # =============================================================================
 if __name__ == "__main__":
