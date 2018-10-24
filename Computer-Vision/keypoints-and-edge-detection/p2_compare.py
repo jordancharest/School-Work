@@ -165,7 +165,6 @@ def extract_SIFT_keypoints(img, sigma, img_name, ext):
     a good idea because each orientation will create a different descriptor.
     '''
     kp_unique = []
-    print("3*sigma =", 3*sigma)
     for k in kp[1:]:
         if (not kp_unique or k.pt != kp_unique[-1].pt) and k.size <= 3*sigma:
             kp_unique.append( k )
@@ -215,10 +214,10 @@ def keypoint_match(set1, set2, set1_name, set2_name):
 
     print("\n{0} keypoint to {1} distances:".format(set1_name, set2_name))
     print("num_from", last_set1, "num_to", last_set2)
-    print("Median distance: {0:.2f}".format(med_dist))
-    print("Average distance: {0:.2f}".format(avg_dist))
-    print("Median index difference: {0:.2f}".format(med_rank))
-    print("Average index difference: {0:.2f}".format(avg_rank))
+    print("Median distance: {0:.1f}".format(med_dist))
+    print("Average distance: {0:.1f}".format(avg_dist))
+    print("Median index difference: {0:.1f}".format(med_rank))
+    print("Average index difference: {0:.1f}".format(avg_rank))
 
 
 # =============================================================================
