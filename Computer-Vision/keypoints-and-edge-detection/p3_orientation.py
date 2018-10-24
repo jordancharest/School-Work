@@ -34,61 +34,7 @@ def calculate_gradients(img, sigma=1.0):
     gradient_magnitude = np.sqrt(x_gradient.astype(np.float64)**2 + y_gradient**2) # np.hypot()
     gradient_direction = np.arctan2(y_gradient, x_gradient)
 
-    return gradient_magnitude, gradient_direction #, weight
-
-# -----------------------------------------------------------------------------
-def orientation_voting2(pt, weight, magnitude, direction, sigma):
-    sigma_v = 2*sigma
-    w = round(2*sigma_v)
-    # print("2w + 1 =", 2*w+1)
-
-    # extract the neighborhood around the point
-    row, col = pt
-    w_neighborhood = weight[row-w : row+w+1, col-w : col+w+1]
-    print("Weight:\n", w_neighborhood)
-
-    d_neighborhood = direction[row-w : row+w+1, col-w : col+w+1]
-    # print(w_neighborhood.shape)
-    # print(w_neighborhood)
-    # print(d_neighborhood.shape)
-    np.set_printoptions(precision=2)
-    print("Direction Neighborhood:\n",d_neighborhood)
-
-
-    # convert to degrees
-    deg = 180.0 / m.pi
-    d_neighborhood *= deg
-    print("Votes:\n", d_neighborhood)
-    histogram, delimiters = np.histogram(d_neighborhood.flatten(), bins=range(-180,190,10))
-    print("Histogram:\n",histogram, "\nDelimiters:\n", delimiters)
-     
-    # determine the distance between votes and 5 for linear interpolation
-    # if votes == 0, then the weight is divided evenly between two bins
-    votes = d_neighborhood % 10
-    rounded = np.round(d_neighborhood, -1)
-    print("\nBefore:\n", votes)
-    votes = np.abs(np.abs(votes) - 5)
-    print("\nAfter:\n", votes)
-    bin_weight  = 1.0 - votes/5.0
-    print("\nBin weight:\n", votes)
-    print("\nRounded:\n", rounded)
-
-    weighted_histogram1 = np.zeros(d_neighborhood.shape)
-    less = np.where(d_neighborhood < rounded, True, False)
-   
-    weighted_histogram1 = w_neighborhood * bin_weight * less
-    print(weighted_histogram1)
-
-
-    histogram = np.zeros(35)
-    # histogram[]
-
-
-
-
-
-    # print(bin_size_rad)
-
+    return gradient_magnitude, gradient_direction
 
 # -----------------------------------------------------------------------------
 def orientation_voting(pt, magnitude, direction, sigma):
@@ -96,8 +42,6 @@ def orientation_voting(pt, magnitude, direction, sigma):
     ksize = int(4*sigma_v+1)
     kernel = cv2.getGaussianKernel(ksize, sigma_v)
     kernel = kernel.T * kernel
-    # print("Sum:", np.sum(kernel))
-    # print(kernel)
     w = round(2*sigma_v)
 
     # extract the neighborhood around the point and calculate weight function
@@ -105,9 +49,6 @@ def orientation_voting(pt, magnitude, direction, sigma):
     weight = kernel * magnitude[row-w : row+w+1, col-w : col+w+1]
     d_neighborhood = direction[row-w : row+w+1, col-w : col+w+1]
     d_neighborhood *= (180.0 / m.pi)
-    # print("Weight:\n", weight)
-    # print("Direction Neighborhood:\n",d_neighborhood)
-
 
     histogram = []
     delimiters = range(-180,180,10)
