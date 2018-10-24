@@ -59,6 +59,8 @@ def calculate_gradients(img, sigma=1.0):
 
     gradient_magnitude = np.sqrt(x_gradient**2 + y_gradient**2)
     gradient_direction = np.arctan2(y_gradient, x_gradient)
+    # print("Maximum direction:",np.max(gradient_direction))
+    # print("Minimum direction:",np.min(gradient_direction))
 
     return gradient_magnitude, gradient_direction
 
@@ -157,14 +159,15 @@ if __name__ == "__main__":
     # smooth and calculate gradient magnitude and direction
     grad_magnitude, grad_direction = calculate_gradients(gray, sigma)
 
+    # suppress borders
+    grad_magnitude[0, :] = 0
+    grad_magnitude[-1, :] = 0
+    grad_magnitude[:, 0] = 0
+    grad_magnitude[:, -1] = 0
+
     # gradient magnitude, converted to scale 0-255
     grad_output = (grad_magnitude / np.max(grad_magnitude)) * 255
     
-    # suppress borders
-    grad_output[0, :] = 0
-    grad_output[-1, :] = 0
-    grad_output[:, 0] = 0
-    grad_output[:, -1] = 0
     cv2.imwrite(img_name + "_grd." + ext, grad_output)
 
     # separate the gradient direction into 4 different bins, 45 degrees each
