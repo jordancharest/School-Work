@@ -54,11 +54,14 @@ def orientation_voting(pt, magnitude, direction, sigma):
     delimiters = range(-180,180,10)
 
     next_bin = 0.0
+    peaks = []
+
+    # fill each bin
     for d in delimiters:
         histogram.append(next_bin)
         next_bin = 0.0
 
-
+        # we only care about the indexes that have values within the current bins
         bin_center = (d + d + 10) / 2
         index = np.where((d_neighborhood > d) & (d_neighborhood < d+10), 1, 0)
         
@@ -66,19 +69,54 @@ def orientation_voting(pt, magnitude, direction, sigma):
         dist_to_center = d_neighborhood - bin_center
         interpolation_weight = (1 - np.abs(dist_to_center)/5.0) * index
 
+        # interpolated weight for the adjacent bins
         before = np.where(dist_to_center < 0, 1, 0)
         after = np.where(dist_to_center > 0, 1, 0)
 
+        # add weight to the current bin
         histogram[-1] += np.sum(index * weight * interpolation_weight)
 
+        # add to the previous bin
         if d != -180:
             histogram[-2] += np.sum(index * weight * (1-interpolation_weight) * before)
 
+        # save to add to the next bin
         next_bin = np.sum(index * weight * (1-interpolation_weight) * after)
 
-    return histogram
+        # generate a list of potential peak locations
+        max_index = np.argmax(index * weight) # * interpolation_weight?
+        theta = direction.ravel()[max_index]
+        value = weight.ravel()[max_index]
+        peaks.append((theta, value))
+
+    return histogram, peaks
 
 # -----------------------------------------------------------------------------
+def smooth_histogram(hist):
+    # mod by length of histogram so that the first and last values are
+    # wrapped around
+    smooth = []
+    peaks = []
+    for i in range(len(hist)):
+        avg = (((hist[(i-1) % len(hist)] + hist[(i+1) % len(hist)]) / 2.0) + hist[i]) / 2.0
+        smooth.append(avg)
+
+
+    for i in range(len(smooth)):
+        if smooth[i] > smooth[(i-1) % len(smooth)] and \
+            smooth[i] > smooth[(i+1) % len(smooth)]:
+            peaks.append(i)
+
+    return smooth, peaks
+
+# -----------------------------------------------------------------------------
+def find_peaks(h, h_smooth, peak_vals, peak_locations):
+    for i, loc in enumerate(peak_locations):
+        print("Peak {0}: theta {1:.1f}, value {2:.2f}".format(i, peak_vals[loc][0], 
+                                                                peak_vals[loc][1]))
+
+
+
 
 # =============================================================================
 if __name__ == "__main__":
@@ -87,10 +125,13 @@ if __name__ == "__main__":
     magnitude, direction = calculate_gradients(gray, sigma)
 
     for i, pt in enumerate(pts):
-        h = orientation_voting(pt, magnitude, direction, sigma)
-        h_smooth = smooth_histogram(h)
+        h, peak_vals = orientation_voting(pt, magnitude, direction, sigma)
+        h_smooth, peak_locations = smooth_histogram(h)
         
         print("\n Point {0}: ({1}, {2})".format(i, pt[0], pt[1]))
         print("Histograms:")
-        for k,j in enumerate(range(-18,18)):
-            print("[{0},{1}]: {2:.2f}".format(j*10, (j+1)*10, h[k], h_smooth[k]))
+        step = 10
+        for k,j in enumerate(range(-180,180,step)):
+            print("[{0},{1}]: {2:.2f} {3:.2f}".format(j, j+step, h[k], h_smooth[k]))
+            
+        peaks = find_peaks(h, h_smooth, peak_vals, peak_locations)
