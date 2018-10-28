@@ -42,7 +42,7 @@ def orientation_voting(pt, magnitude, direction, sigma):
     sigma_v = 2*sigma
     ksize = int(4*sigma_v+1)
     kernel = cv2.getGaussianKernel(ksize, sigma_v)
-    kernel = kernel.T * kernel
+    kernel = kernel * kernel.T
     w = round(2*sigma_v)
 
     # extract the neighborhood around the point and calculate weight function
