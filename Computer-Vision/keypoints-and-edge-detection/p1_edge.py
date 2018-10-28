@@ -37,7 +37,7 @@ def arg_parse():
         # extract image name and read it
         _, filename = ntpath.split(path_to_img)
         filename, ext = filename.split(".")
-        img = cv2.imread(path_to_img, cv2.IMREAD_COLOR)
+        img = cv2.imread(path_to_img, cv2.IMREAD_GRAYSCALE).astype(np.float64)
 
         return float(sigma), img, filename, ext
 
@@ -74,6 +74,8 @@ def gradient_direction(magnitude, direction, filename, ext, shape):
     image borders       : black
     magnitude < 1.0     : black
     """
+    shape = list(shape)
+    shape.append(3)
     result = np.zeros(shape)
 
     # rotate so that the boundary between red and green is at 0
@@ -153,8 +155,8 @@ def edge_threshold(mag, sigma):
 
 # =============================================================================
 if __name__ == "__main__":
-    sigma, img, img_name, ext = arg_parse()
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(float)
+    sigma, gray, img_name, ext = arg_parse()
+    # gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(float)
 
     # smooth and calculate gradient magnitude and direction
     grad_magnitude, grad_direction = calculate_gradients(gray, sigma)
@@ -172,7 +174,7 @@ if __name__ == "__main__":
 
     # separate the gradient direction into 4 different bins, 45 degrees each
     E_W, NE_SW, N_S, NW_SE = gradient_direction(grad_magnitude, grad_direction, 
-                                                img_name, ext, img.shape)
+                                                img_name, ext, gray.shape)
 
     # attempt to trim edges to a single pixel wide and remove spurious detections
     grad_magnitude = non_max_suppression(grad_magnitude, E_W, NE_SW, N_S, NW_SE)
