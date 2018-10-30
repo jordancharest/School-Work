@@ -41,6 +41,7 @@ def get_output_names(name_list):
 
     output_names.append(ext)
     return output_names
+
 # -----------------------------------------------------------------------------
 def draw_keypoint_matches(img1, kp1, img2, kp2, matches, out_name,
                             matchesMask=None, matchColor=(0,255,0)):
@@ -56,7 +57,30 @@ def draw_keypoint_matches(img1, kp1, img2, kp2, matches, out_name,
 
 
 # -----------------------------------------------------------------------------
-def detect_and_match(img_name1, img_name2):
+def stitch(img1, img2, H, i):
+    rows1, cols1 = img1.shape[:2]
+    rows2, cols2 = img2.shape[:2]
+
+    list_of_points_1 = np.float32([[0,0], [0,rows1], [cols1,rows1], [cols1,0]]).reshape(-1,1,2)
+    temp_points = np.float32([[0,0], [0,rows2], [cols2,rows2], [cols2,0]]).reshape(-1,1,2)
+    list_of_points_2 = cv2.perspectiveTransform(temp_points, H)
+    list_of_points = np.concatenate((list_of_points_1, list_of_points_2), axis=0)
+
+    [x_min, y_min] = np.int32(list_of_points.min(axis=0).ravel() - 0.5)
+    [x_max, y_max] = np.int32(list_of_points.max(axis=0).ravel() + 0.5)
+    translation_dist = [-x_min,-y_min]
+    H_translation = np.array([[1, 0, translation_dist[0]], [0, 1, translation_dist[1]], [0,0,1]])
+
+    output_img = cv2.warpPerspective(img2, H_translation.dot(H), (x_max-x_min, y_max-y_min))
+    output_img[translation_dist[1]:rows1+translation_dist[1], translation_dist[0]:cols1+translation_dist[0]] = img1
+
+    cv2.imwrite("Mosaic" + str(i) + ".jpg", output_img)
+    
+    # return output_img
+
+
+# -----------------------------------------------------------------------------
+def detect_and_match(img_name1, img_name2, i):
     out_name1, out_name2, ext = get_output_names((img_name1, img_name2))
 
     img1 = cv2.imread(img_name1, cv2.IMREAD_GRAYSCALE)
@@ -115,6 +139,11 @@ def detect_and_match(img_name1, img_name2):
         out_name = out_name1 + "_" + out_name2 + "_after_H_mat." + ext
         draw_keypoint_matches(img1, kp1, img2, kp2, good, out_name, matchesMask, (255,0,0))
 
+
+        # if they are a good fit
+        if True:
+            stitch(img2, img1, H, i)
+
         # dst = cv2.perspectiveTransform(pts,M)
         # img2 = cv2.polylines(img2,[np.int32(dst)],True,255,3, cv2.LINE_AA)
 
@@ -134,7 +163,7 @@ if __name__ == "__main__":
 
     # attempt to match adjacent images in the directory
     for i in range(len(img_list[:-1])):
-        detect_and_match(img_list[i], img_list[i+1])
+        detect_and_match(img_list[i], img_list[i+1], i)
 
 
 
