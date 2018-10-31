@@ -93,6 +93,8 @@ def find_match(img1, img2, kp1, kp2, good, stats1, stats2):
         stats2['total_matches'] += num_H_matches
         stats1['img_matches'].append(stats2['index'])
         stats2['img_matches'].append(stats1['index'])
+        stats1['homography'].append(H)
+        stats2['homography'].append(H)
         # stitch(img2, img1, H, mosaic_num)
     else:
         print("These two images would not make a good mosaic")
@@ -144,7 +146,7 @@ def stitch(img1, img2, H, i):
 
     cv2.imwrite("Mosaic" + str(i) + ".jpg", output_img)
     
-    # return output_img
+    return output_img
 
 
 # -----------------------------------------------------------------------------
@@ -192,7 +194,29 @@ def detect_and_match(color_img1, color_img2, stats1, stats2):
 # -----------------------------------------------------------------------------
 def build_mosaic(images, match_stats):
     anchor = match_stats[0]
+    anchor_img = images[anchor['index']]
     print("\nAnchor:", anchor['name'])
+
+    # map adjacent images on the anchor
+    j = 0
+    for i in anchor['img_matches']:
+        # first time through need to make the mosaic
+        if j == 0:
+            if i < anchor['index']:
+                result = stitch(anchor_img, images[i], anchor['homography'][j], j)
+            else:
+                result = stitch(anchor_img, images[i], np.linalg.inv(anchor['homography'][j]), j)
+
+        # then add on to the existing mosaic
+        else:
+            if i < anchor['index']:
+                result = stitch(result, images[i], anchor['homography'][j], j)
+            else:
+                result = stitch(result, images[i], np.linalg.inv(anchor['homography'][j]), j)
+
+        j += 1
+
+
 
 
 # =============================================================================
@@ -252,7 +276,11 @@ if __name__ == "__main__":
     for d in match_stats:
         print()
         for k, v in d.items():
-            print("  {0} :  {1}".format(k.ljust(13),v))
+            if k == 'homography':
+                print("  {0} :  {1}".format("homographies".ljust(13), len(v)))
+            else:
+                print("  {0} :  {1}".format(k.ljust(13),v))
+
 
     build_mosaic(images, match_stats)
 
