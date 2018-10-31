@@ -9,8 +9,9 @@ import cv2
 
 # some tunable params
 MIN_MATCH_COUNT = 25
-FM_RANSAC_THRESHOLD = 0.25
-H_RANSAC_THRESHOLD = 1.0
+FM_RANSAC_THRESHOLD = 0.5
+H_RANSAC_THRESHOLD = 1.5
+F_TO_H_THRESHOLD = 0.75
 
 # -----------------------------------------------------------------------------
 def arg_parse():
@@ -44,10 +45,10 @@ def get_output_names(name_list):
 
 # -----------------------------------------------------------------------------
 def draw_keypoint_matches(img1, kp1, img2, kp2, matches, out_name,
-                            matchesMask=None, matchColor=(0,255,0)):
+                            matchesMask=None, color=(0,255,0)):
     
     # draw matches on the images together
-    draw_params = dict(matchColor = matchColor,
+    draw_params = dict(matchColor = color,
                    singlePointColor = None,
                    matchesMask = matchesMask, # draw only inliers (if specified)
                    flags = 2)
@@ -57,7 +58,30 @@ def draw_keypoint_matches(img1, kp1, img2, kp2, matches, out_name,
 
 
 # -----------------------------------------------------------------------------
+def calculate_transformation(src_pts, dst_pts, kind="F"):
+    if kind == "F":
+        print("Calculating Fundamental Matrix")
+        M, mask = cv2.findFundamentalMat(src_pts, dst_pts, cv2.FM_RANSAC, FM_RANSAC_THRESHOLD)
+    elif kind == "H":
+        print("Calculating Homography")
+        M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, H_RANSAC_THRESHOLD)
+    else:
+        print("ERROR: Unknown transformation type!")
+
+    matches_mask = mask.ravel().tolist()
+    num_matches = np.sum(matches_mask)
+    print("Original: ", len(matches_mask))
+    print("Survived: ", num_matches)
+
+    return M, matches_mask, num_matches
+
+# -----------------------------------------------------------------------------
 def stitch(img1, img2, H, i):
+    # h,w = img1.shape
+    # pts = np.float32([ [0,0],[0,h-1],[w-1,h-1],[w-1,0] ]).reshape(-1,1,2)
+    # dst = cv2.perspectiveTransform(pts, F)
+
+
     rows1, cols1 = img1.shape[:2]
     rows2, cols2 = img2.shape[:2]
 
@@ -80,13 +104,13 @@ def stitch(img1, img2, H, i):
 
 
 # -----------------------------------------------------------------------------
-def detect_and_match(img_name1, img_name2, i):
-    out_name1, out_name2, ext = get_output_names((img_name1, img_name2))
-
-    img1 = cv2.imread(img_name1, cv2.IMREAD_GRAYSCALE)
-    img2 = cv2.imread(img_name2, cv2.IMREAD_GRAYSCALE)
+def detect_and_match(color_img1, color_img2, out_name1, out_name2, ext, 
+                        mosaic_num):
+    # keypoint matching is done in grayscale
+    img1 = cv2.cvtColor(color_img1, cv2.COLOR_BGR2GRAY)
+    img2 = cv2.cvtColor(color_img2, cv2.COLOR_BGR2GRAY)
     
-    # detect and compute keypoints and descriptors for each image
+    # detect keypoints and compute and descriptors for each image
     # detector = cv2.xfeatures2d.SURF_create()
     detector = cv2.xfeatures2d.SIFT_create()
     kp1, des1 = detector.detectAndCompute(img1, None)
@@ -103,51 +127,47 @@ def detect_and_match(img_name1, img_name2, i):
     # store all the good matches per Lowe's ratio test
     good = []
     for m,n in matches:
-        if m.distance < 0.7*n.distance:
+        if m.distance < 0.75*n.distance:
             good.append(m)
 
     # draw all keypoints that pass the ratio test
     out_name = out_name1 + "_" + out_name2 + "_before_F_mat." + ext
-    draw_keypoint_matches(img1, kp1, img2, kp2, good, out_name, matchColor=(0,0,255))
+    draw_keypoint_matches(img1, kp1, img2, kp2, good, out_name, color=(0,0,255))
 
     # if the minimum threshold is met
     if len(good) > MIN_MATCH_COUNT:
         src_pts = np.float32([ kp1[m.queryIdx].pt for m in good]).reshape(-1,1,2)
         dst_pts = np.float32([ kp2[m.trainIdx].pt for m in good]).reshape(-1,1,2)
-    
-        # calculate fundamental matrix, output surviving keypoint match
-        print("Calculating Fundamental Matrix")
-        F, mask = cv2.findFundamentalMat(src_pts, dst_pts, cv2.FM_RANSAC, FM_RANSAC_THRESHOLD)
-        matchesMask = mask.ravel().tolist()
-        num_F_matches = np.sum(matchesMask)
-        print("Original: ", len(matchesMask))
-        print("Survived: ", num_F_matches)
+
+        # approximate the Fundamental matrix (RANSAC) and output the matches
+        # that survive
+        F, matches_mask, num_F_matches = calculate_transformation(src_pts, 
+                                                                  dst_pts, 
+                                                                  kind="F")
         out_name = out_name1 + "_" + out_name2 + "_after_F_mat." + ext
-        draw_keypoint_matches(img1, kp1, img2, kp2, good, out_name, matchesMask, (0,255,0))
+        draw_keypoint_matches(img1, kp1, img2, kp2, good, out_name, 
+                                matches_mask, color=(0,255,0))
 
-        # h,w = img1.shape
-        # pts = np.float32([ [0,0],[0,h-1],[w-1,h-1],[w-1,0] ]).reshape(-1,1,2)
-        # dst = cv2.perspectiveTransform(pts, F)
 
-        # calculate homography
-        print("Calculating Homography")
-        H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, H_RANSAC_THRESHOLD)
-        matchesMask = mask.ravel().tolist()
-        num_H_matches = np.sum(matchesMask)
-        print("Original: ", len(matchesMask))
-        print("Survived: ", num_H_matches)
+        # approximate a Homography (RANSAC) and output the matches
+        # that survive
+        H, matches_mask, num_H_matches = calculate_transformation(src_pts, 
+                                                                  dst_pts, 
+                                                                  kind="H")
         out_name = out_name1 + "_" + out_name2 + "_after_H_mat." + ext
-        draw_keypoint_matches(img1, kp1, img2, kp2, good, out_name, matchesMask, (255,0,0))
+        draw_keypoint_matches(img1, kp1, img2, kp2, good, out_name, matches_mask, color=(255,0,0))
 
 
         # if they are a good fit
-        if True:
-            stitch(img2, img1, H, i)
+        ratio = num_H_matches / num_F_matches
+        print(ratio)
+        if num_H_matches > 0.4*len(good) and ratio > F_TO_H_THRESHOLD:
+            stitch(img2, img1, H, mosaic_num)
+        else:
+            print("These two images would not make a good mosaic")
 
         # dst = cv2.perspectiveTransform(pts,M)
         # img2 = cv2.polylines(img2,[np.int32(dst)],True,255,3, cv2.LINE_AA)
-
-
 
     else:
         print("Not enough matches are found - %d/%d" % (len(good),MIN_MATCH_COUNT))
@@ -161,9 +181,39 @@ if __name__ == "__main__":
     img_list.sort()
     print(img_list)
 
-    # attempt to match adjacent images in the directory
-    for i in range(len(img_list[:-1])):
-        detect_and_match(img_list[i], img_list[i+1], i)
+    images = [None] * len(img_list)
+    img_characteristics = []
+    mosaic_num = 0
+
+    # attempt to match each image with every other image in the directory
+    # return a set of characteristics that describe how well it matched
+    for i, img_name1 in enumerate(img_list[:-1]):
+        for j, img_name2 in enumerate(img_list[i+1:]):
+            j += i + 1
+
+            # don't read images in multiple times
+            if images[i] is None:
+                img1 = cv2.imread(img_name1, cv2.IMREAD_COLOR)
+                images[i] = img1
+            else:
+                img1 = images[i]
+
+            if images[j] is None:
+                img2 = cv2.imread(img_name2, cv2.IMREAD_COLOR)
+                images[j] = img2
+            else:
+                img2 = images[j]
+
+            out_name1, out_name2, ext = get_output_names((img_name1, img_name2))
+
+            # detect and match keypoints between the two images, return
+            # characteristics about the match
+            print("\nComparing {0} and {1}".format(out_name1, out_name2))
+            characteristic = detect_and_match(img1, img2, out_name1, out_name2,
+                                                ext, mosaic_num)
+            img_characteristics.append(characteristic)
+
+            mosaic_num += 1
 
 
 
