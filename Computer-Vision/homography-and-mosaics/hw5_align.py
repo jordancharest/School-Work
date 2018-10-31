@@ -122,10 +122,11 @@ def calculate_transformation(src_pts, dst_pts, kind="F"):
     return M, matches_mask, num_matches
 
 # -----------------------------------------------------------------------------
-def stitch(img1, img2, H, i):
+def stitch(img1, img2, H, i, initial_offset):
     # h,w = img1.shape
     # pts = np.float32([ [0,0],[0,h-1],[w-1,h-1],[w-1,0] ]).reshape(-1,1,2)
     # dst = cv2.perspectiveTransform(pts, F)
+    print("Initial Offsets:", initial_offset)
 
 
     rows1, cols1 = img1.shape[:2]
@@ -138,15 +139,21 @@ def stitch(img1, img2, H, i):
 
     [x_min, y_min] = np.int32(list_of_points.min(axis=0).ravel() - 0.5)
     [x_max, y_max] = np.int32(list_of_points.max(axis=0).ravel() + 0.5)
+
+    x_min -= initial_offset[0]
+    y_min -= initial_offset[1]
+    print("Offsets:", x_min, y_min)
     translation_dist = [-x_min,-y_min]
+    # translation_dist[0] += initial_offset[0]
+    # translation_dist[1] += initial_offset[1]
     H_translation = np.array([[1, 0, translation_dist[0]], [0, 1, translation_dist[1]], [0,0,1]])
 
     output_img = cv2.warpPerspective(img2, H_translation.dot(H), (x_max-x_min, y_max-y_min))
-    output_img[translation_dist[1]:rows1+translation_dist[1], translation_dist[0]:cols1+translation_dist[0]] = img1
+    output_img[translation_dist[1]:rows1+translation_dist[1], translation_dist[0]:cols1+translation_dist[0]] = np.mean([img1,img2])
 
     cv2.imwrite("Mosaic" + str(i) + ".jpg", output_img)
     
-    return output_img
+    return output_img, translation_dist
 
 
 # -----------------------------------------------------------------------------
@@ -203,16 +210,16 @@ def build_mosaic(images, match_stats):
         # first time through need to make the mosaic
         if j == 0:
             if i < anchor['index']:
-                result = stitch(anchor_img, images[i], anchor['homography'][j], j)
+                result, offset = stitch(anchor_img, images[i], anchor['homography'][j], j, [0,0])
             else:
-                result = stitch(anchor_img, images[i], np.linalg.inv(anchor['homography'][j]), j)
+                result, offset = stitch(anchor_img, images[i], np.linalg.inv(anchor['homography'][j]), j, [0,0])
 
         # then add on to the existing mosaic
         else:
             if i < anchor['index']:
-                result = stitch(result, images[i], anchor['homography'][j], j)
+                result, translation_dist = stitch(result, images[i], anchor['homography'][j], j, offset)
             else:
-                result = stitch(result, images[i], np.linalg.inv(anchor['homography'][j]), j)
+                result, translation_dist = stitch(result, images[i], np.linalg.inv(anchor['homography'][j]), j, offset)
 
         j += 1
 
