@@ -1,11 +1,11 @@
 from sys import argv
+from copy import deepcopy
 import os
 import ntpath
 
 import numpy as np
 from scipy import spatial
 import cv2
-
 
 # some tunable params
 MIN_MATCH_COUNT = 25
@@ -104,8 +104,11 @@ def stitch(img1, img2, H, i):
 
 
 # -----------------------------------------------------------------------------
-def detect_and_match(color_img1, color_img2, out_name1, out_name2, ext, 
-                        mosaic_num):
+def detect_and_match(color_img1, color_img2, stats1, stats2):
+
+    out_name1, out_name2, ext = get_output_names((stats1['name'], stats2['name']))
+    print("\nComparing {0} and {1}".format(out_name1, out_name2))
+
     # keypoint matching is done in grayscale
     img1 = cv2.cvtColor(color_img1, cv2.COLOR_BGR2GRAY)
     img2 = cv2.cvtColor(color_img2, cv2.COLOR_BGR2GRAY)
@@ -155,14 +158,18 @@ def detect_and_match(color_img1, color_img2, out_name1, out_name2, ext,
                                                                   dst_pts, 
                                                                   kind="H")
         out_name = out_name1 + "_" + out_name2 + "_after_H_mat." + ext
-        draw_keypoint_matches(img1, kp1, img2, kp2, good, out_name, matches_mask, color=(255,0,0))
+        draw_keypoint_matches(img1, kp1, img2, kp2, good, out_name, 
+                                matches_mask, color=(255,0,0))
 
 
-        # if they are a good fit
+        # if they are a good fit update the match statistics
         ratio = num_H_matches / num_F_matches
-        print(ratio)
         if num_H_matches > 0.4*len(good) and ratio > F_TO_H_THRESHOLD:
-            stitch(img2, img1, H, mosaic_num)
+            stats1['total_matches'] += num_H_matches
+            stats2['total_matches'] += num_H_matches
+            stats1['img_matches'].append(stats2['index'])
+            stats2['img_matches'].append(stats1['index'])
+            # stitch(img2, img1, H, mosaic_num)
         else:
             print("These two images would not make a good mosaic")
 
@@ -173,16 +180,26 @@ def detect_and_match(color_img1, color_img2, out_name1, out_name2, ext,
         print("Not enough matches are found - %d/%d" % (len(good),MIN_MATCH_COUNT))
         matchesMask = None
 
+# -----------------------------------------------------------------------------
+def build_mosaic(images, match_stats):
+    anchor = match_stats[0]
+    print("\nAnchor:", anchor['name'])
+
 
 # =============================================================================
 if __name__ == "__main__":
-
     img_list = arg_parse()
-    img_list.sort()
-    print(img_list)
 
+    # hold all images and statistics about the match quality
     images = [None] * len(img_list)
-    img_characteristics = []
+    ms = {   
+        'name' : "",
+        'index' : 0,
+        'total_matches' : 0,
+        'img_matches' : [],
+        'homography' : []
+    }
+    match_stats = [deepcopy(ms) for k in range(len(img_list))]
     mosaic_num = 0
 
     # attempt to match each image with every other image in the directory
@@ -191,29 +208,43 @@ if __name__ == "__main__":
         for j, img_name2 in enumerate(img_list[i+1:]):
             j += i + 1
 
-            # don't read images in multiple times
+            # don't read images in multiple times and
+            # initialize the dictionary characterizing this match
             if images[i] is None:
                 img1 = cv2.imread(img_name1, cv2.IMREAD_COLOR)
                 images[i] = img1
+                match_stats[i]['name'] = img_name1
+                match_stats[i]['index'] = i
             else:
                 img1 = images[i]
 
             if images[j] is None:
                 img2 = cv2.imread(img_name2, cv2.IMREAD_COLOR)
                 images[j] = img2
+                match_stats[j]['name'] = img_name2
+                match_stats[j]['index'] = j
             else:
                 img2 = images[j]
 
             out_name1, out_name2, ext = get_output_names((img_name1, img_name2))
 
+
             # detect and match keypoints between the two images, return
             # characteristics about the match
-            print("\nComparing {0} and {1}".format(out_name1, out_name2))
-            characteristic = detect_and_match(img1, img2, out_name1, out_name2,
-                                                ext, mosaic_num)
-            img_characteristics.append(characteristic)
+            detect_and_match(img1, img2, match_stats[i], match_stats[j])
 
             mosaic_num += 1
+
+    # use the match characteristics to determine how to build the mosaic(s)
+    # the image with the highest number of matches will be the anchor
+    match_stats.sort(key = lambda k : k['total_matches'])
+    print("\n\nMatch Statistics (sorted):")
+    for d in match_stats:
+        print()
+        for k, v in d.items():
+            print("  {0} :  {1}".format(k.ljust(13),v))
+
+    build_mosaic(images, match_stats)
 
 
 
