@@ -4,7 +4,6 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 
-
 # -----------------------------------------------------------------------------
 def arg_parse():
     if len(argv) == 3:
@@ -16,7 +15,6 @@ def arg_parse():
         print("Invalid Argument(s).")
         print("USAGE: {} <image> <pixel-coordinates-file>")
         exit()
-
 
 # -----------------------------------------------------------------------------
 def show_with_pixel_values(im):
@@ -48,9 +46,29 @@ def show_with_pixel_values(im):
     ax.format_coord = format_coord  
     plt.show()
 
+
+# -----------------------------------------------------------------------------
+def plot_multiple(images, rows, cols, titles=[], figsize=(20,10), fontsize=30,
+                    save=False, save_name=""):
+
+    f, axs = plt.subplots(rows, cols, figsize=figsize)
+    axs = axs.ravel()
+
+    if len(images) != len(titles):
+        print("ERROR: Number of titles not equal to number of images")
+        return
+
+    for j, img in enumerate(images):
+        axs[j].imshow(img)
+        if titles:
+            axs[j].set_title(titles[j], fontsize=fontsize)
+
+    if save:
+        plt.savefig(save_name)
+
 # -----------------------------------------------------------------------------
 def read_rectangles(filename):
-    # read the first line of the file and determine how many
+    # read the first line of the file to determine how many
     # foreground rectangles there are
     with open(filename, "r") as file:
         numbers = file.readline().split()
@@ -72,34 +90,25 @@ def read_rectangles(filename):
 # -----------------------------------------------------------------------------
 def draw_rectangles(img, boundary, foreground, background):
     boundary_img = np.copy(img)
-    bground_img = np.copy(img)
-    fground_img = np.copy(img)
 
     # draw boundary
     pt1 = tuple(boundary[:2])
     pt2 = tuple(boundary[2:])
     boundary_img = cv2.rectangle(boundary_img, pt1, pt2, color=(255,0,0), thickness=2)
-    fground_img = cv2.rectangle(fground_img, pt1, pt2, color=(255,0,0), thickness=2)
-    bground_img = cv2.rectangle(bground_img, pt1, pt2, color=(255,0,0), thickness=2)
 
     # draw foreground rectangles
     for row in foreground:
         pt1 = tuple(row[:2])
         pt2 = tuple(row[2:])
-        fground_img = cv2.rectangle(fground_img, pt1, pt2, color=(0,255,0), thickness=1)
+        boundary_img = cv2.rectangle(boundary_img, pt1, pt2, color=(0,255,0), thickness=1)
 
     # draw background rectangles
     for row in background:
         pt1 = tuple(row[:2])
         pt2 = tuple(row[2:])
-        bground_img = cv2.rectangle(bground_img, pt1, pt2, color=(0,0,255), thickness=1)
+        boundary_img = cv2.rectangle(boundary_img, pt1, pt2, color=(0,0,255), thickness=1)
 
-    cv2.imwrite("boundary.jpg", boundary_img)
-    cv2.imwrite("foreground.jpg", fground_img)
-    cv2.imwrite("background.jpg", bground_img)
-
-    return boundary_img, fground_img, bground_img
-    
+    cv2.imwrite("boundary.jpg", boundary_img)    
 
 # -----------------------------------------------------------------------------
 def segment(img, boundary, foreground, background):
@@ -125,9 +134,8 @@ def segment(img, boundary, foreground, background):
     fgdModel = np.zeros((1,65),np.float64)
     rect = tuple(boundary)
     mask, fgdModel, bgdModel = cv2.grabCut(img, mask, rect, bgdModel,
-                                                    fgdModel, 5, 
-                                                    cv2.GC_INIT_WITH_MASK)
-
+                                            fgdModel, 5, 
+                                            cv2.GC_INIT_WITH_MASK)
 
     mask = np.where((mask==2)|(mask==0),0,1).astype('uint8')
     img = img*mask[:,:,np.newaxis]
@@ -138,18 +146,16 @@ def segment(img, boundary, foreground, background):
 if __name__ == "__main__":
     img, pixel_file = arg_parse()
     boundary, foreground, background = read_rectangles(pixel_file)
-
-    labeled_imgs = draw_rectangles(img, boundary, foreground, background)
-    boundary_img, fground_img, bground_img = labeled_imgs
-
+    draw_rectangles(img, boundary, foreground, background)
 
     print("Boundary:\n", boundary)
     print("Foreground:\n", foreground)
     print("Background:\n", background)
 
+    # run GrabCut
     segmented = segment(img, boundary, foreground, background)
-    # show_with_pixel_values(segmented)
+
+    # save result
     cv2.imwrite("segmented.jpg", segmented)
     show_with_pixel_values(img)
-
-
+    # show_with_pixel_values(segmented)
