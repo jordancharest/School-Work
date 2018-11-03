@@ -108,42 +108,29 @@ def segment(img, boundary, foreground, background):
     mask = np.ones(img.shape[:2], np.uint8)
     mask *= cv2.GC_BGD
 
-    print(cv2.GC_BGD)
-    print(cv2.GC_FGD)
-    print(cv2.GC_PR_FGD)
-    print(cv2.GC_PR_BGD)
-
     # mask the boundary rectangle as probable foreground
-    x1,y1 = boundary[:2]
-    x2,y2 = boundary[2:]
+    x1,y1,x2,y2 = boundary
     mask[y1:y2, x1:x2] = cv2.GC_PR_FGD
-
-
     
     # set definite foreground masks
-    for row in foreground:
-        x1, y1 = row[:2]
-        x2,y2 = row[2:]
+    for x1,y1,x2,y2 in foreground:
         mask[y1:y2, x1:x2] = cv2.GC_FGD
 
     # set definite background masks
-    for row in background:
-        x1,y1 = row[:2]
-        x2,y2 = row[2:]
+    for x1,y1,x2,y2 in background:
         mask[y1:y2, x1:x2] = cv2.GC_BGD
 
+    # run grabcut using the mask
     bgdModel = np.zeros((1,65),np.float64)
     fgdModel = np.zeros((1,65),np.float64)
     rect = tuple(boundary)
-
-    # run grabcut using the rectangle and the mask
-    mask_result, fgdModel, bgdModel = cv2.grabCut(img, mask, rect, bgdModel,
+    mask, fgdModel, bgdModel = cv2.grabCut(img, mask, rect, bgdModel,
                                                     fgdModel, 5, 
                                                     cv2.GC_INIT_WITH_MASK)
 
 
-    mask2 = np.where((mask_result==2)|(mask_result==0),0,1).astype('uint8')
-    img = img*mask2[:,:,np.newaxis]
+    mask = np.where((mask==2)|(mask==0),0,1).astype('uint8')
+    img = img*mask[:,:,np.newaxis]
 
     return img
 
@@ -161,7 +148,8 @@ if __name__ == "__main__":
     print("Background:\n", background)
 
     segmented = segment(img, boundary, foreground, background)
-    show_with_pixel_values(segmented)
-    # show_with_pixel_values(img)
+    # show_with_pixel_values(segmented)
+    cv2.imwrite("segmented.jpg", segmented)
+    show_with_pixel_values(img)
 
 
