@@ -70,9 +70,82 @@ def read_rectangles(filename):
 
 
 # -----------------------------------------------------------------------------
-def draw_rectangles(img, boundary, background, foreground):
-    pass
+def draw_rectangles(img, boundary, foreground, background):
+    boundary_img = np.copy(img)
+    bground_img = np.copy(img)
+    fground_img = np.copy(img)
 
+    # draw boundary
+    pt1 = tuple(boundary[:2])
+    pt2 = tuple(boundary[2:])
+    boundary_img = cv2.rectangle(boundary_img, pt1, pt2, color=(255,0,0), thickness=2)
+    fground_img = cv2.rectangle(fground_img, pt1, pt2, color=(255,0,0), thickness=2)
+    bground_img = cv2.rectangle(bground_img, pt1, pt2, color=(255,0,0), thickness=2)
+
+    # draw foreground rectangles
+    for row in foreground:
+        pt1 = tuple(row[:2])
+        pt2 = tuple(row[2:])
+        fground_img = cv2.rectangle(fground_img, pt1, pt2, color=(0,255,0), thickness=1)
+
+    # draw background rectangles
+    for row in background:
+        pt1 = tuple(row[:2])
+        pt2 = tuple(row[2:])
+        bground_img = cv2.rectangle(bground_img, pt1, pt2, color=(0,0,255), thickness=1)
+
+    cv2.imwrite("boundary.jpg", boundary_img)
+    cv2.imwrite("foreground.jpg", fground_img)
+    cv2.imwrite("background.jpg", bground_img)
+
+    return boundary_img, fground_img, bground_img
+    
+
+# -----------------------------------------------------------------------------
+def segment(img, boundary, foreground, background):
+
+    # define the entire mask as definite background to start
+    mask = np.ones(img.shape[:2], np.uint8)
+    mask *= cv2.GC_BGD
+
+    print(cv2.GC_BGD)
+    print(cv2.GC_FGD)
+    print(cv2.GC_PR_FGD)
+    print(cv2.GC_PR_BGD)
+
+    # mask the boundary rectangle as probable foreground
+    x1,y1 = boundary[:2]
+    x2,y2 = boundary[2:]
+    mask[y1:y2, x1:x2] = cv2.GC_PR_FGD
+
+
+    
+    # set definite foreground masks
+    for row in foreground:
+        x1, y1 = row[:2]
+        x2,y2 = row[2:]
+        mask[y1:y2, x1:x2] = cv2.GC_FGD
+
+    # set definite background masks
+    for row in background:
+        x1,y1 = row[:2]
+        x2,y2 = row[2:]
+        mask[y1:y2, x1:x2] = cv2.GC_BGD
+
+    bgdModel = np.zeros((1,65),np.float64)
+    fgdModel = np.zeros((1,65),np.float64)
+    rect = tuple(boundary)
+
+    # run grabcut using the rectangle and the mask
+    mask_result, fgdModel, bgdModel = cv2.grabCut(img, mask, rect, bgdModel,
+                                                    fgdModel, 5, 
+                                                    cv2.GC_INIT_WITH_MASK)
+
+
+    mask2 = np.where((mask_result==2)|(mask_result==0),0,1).astype('uint8')
+    img = img*mask2[:,:,np.newaxis]
+
+    return img
 
 # =============================================================================
 if __name__ == "__main__":
@@ -87,9 +160,8 @@ if __name__ == "__main__":
     print("Foreground:\n", foreground)
     print("Background:\n", background)
 
-    pt1 = tuple(boundary[:2])
-    pt2 = tuple(boundary[2:])
-    print(pt1)
-    print(pt2)
-    boundary_img = cv2.rectangle(img, pt1, pt2, color=(255,0,0), thickness=2)
-    show_with_pixel_values(boundary_img)
+    segmented = segment(img, boundary, foreground, background)
+    show_with_pixel_values(segmented)
+    # show_with_pixel_values(img)
+
+
