@@ -1,7 +1,12 @@
 from sys import argv
 
-import numpy as np
 import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+
+# to scale the image coordinates so they have less of 
+# an effect during clustering
+scale = 9
 
 # -----------------------------------------------------------------------------
 def arg_parse():
@@ -15,78 +20,109 @@ def arg_parse():
         print("USAGE: {} <k> <image>".format(argv[0]))
         exit()
 
+# -----------------------------------------------------------------------------
+def crop_image(img, gray, tol=0):
+    # img is image data
+    # tol  is tolerance
+    mask = gray > tol
+    # print(mask.any(0))
+    return img[np.ix_(mask.any(1),mask.any(0), (True, True, True))]
 
 # -----------------------------------------------------------------------------
-def test_split(img):
-    # img = np.dstack((img, img, img))
-    print(img.shape)
-    
+def plot_multiple(images, rows, cols, titles=[], figsize=(20,10), fontsize=30,
+                    save=False, save_name=""):
 
-    print("\nBefore:\n", img)
+    f, axs = plt.subplots(rows, cols, figsize=figsize)
+    axs = axs.ravel()
 
-    num_sections = img.shape[0]*img.shape[1]
-    img = np.reshape(img, (num_sections,3))
+    if len(images) != len(titles):
+        print("ERROR: Number of titles not equal to number of images")
+        return
 
-    # img = np.hsplit(img, img.shape[1])
-    # img = np.hsplit(img, img.shape[1])
-    print("\nAfter:\n", img)
+    for j, img in enumerate(images):
+        axs[j].imshow(img)
+        if titles:
+            axs[j].set_title(titles[j], fontsize=fontsize)
+
+    if save:
+        plt.savefig(save_name)
 
 # -----------------------------------------------------------------------------
 def get_vectors(img):
 
     # generate pixel coordinate values
+    # print(img.shape[0]-1)
     y = np.linspace(0, img.shape[0]-1, num=img.shape[0])
     x = np.linspace(0, img.shape[1]-1, num=img.shape[1])
     XX,YY = np.meshgrid(x,y)
-    
+    YY = np.flipud(YY)
     # print(XX)
     # print(YY)
-    # print(img)
 
+    # calculate std deviation of the image within a small kernel
+    blur = cv2.blur(img,(5,5))
+    blur2 = cv2.blur(img**2, (5,5))
+    std_dev = np.sqrt(blur2 - blur**2)
+    
     # stack them on the actual RGB values
-    vectors = np.dstack((XX, YY, img))
+    # place x and y first so that we can
+    vectors = np.dstack((XX/scale, YY/scale, img, std_dev))
 
     # reshape into individual pixel / coordinate vectors
-    # num_pixels = img.shape[0]*img.shape[1]
-    vectors = np.reshape(vectors, (-1, 5))
-
-    print(vectors)
+    vectors = np.reshape(vectors, (-1, vectors.shape[-1]))
 
     return vectors
 
 # -----------------------------------------------------------------------------
-def cluster(vectors, k):
+def cluster(img, vectors, k):
     # Specify the termination criteria, including the number of iterations and
     # an upper bound on the amount of change in the position of the center.
     criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_MAX_ITER, 100, 1.0)
-    num_reinitializations = 1
+    num_reinitializations = 5
     # initialization_method = cv2.KMEANS_RANDOM_CENTERS
     initialization_method = cv2.KMEANS_PP_CENTERS
-    ret, label, center = cv2.kmeans(all_values, k, None, criteria,
+    ret, label, center = cv2.kmeans(vectors.astype(np.float32), k, None, criteria,
                                     num_reinitializations, initialization_method)
+    center *= scale
     print(center)
 
-    # don't know what this does
-    # for i in range(num_clusters):
-    #     cluster = all_values[label.ravel() == i]
-    #     x = cluster[:, 0]
-    #     y = cluster[:, 1]
-    #     print('Cluster %d: %d points' % (i, len(x)))
-    #     c = np.random.random(3).reshape(1,3)
-    #     plt.scatter(x, y, c=c)
-    # plt.scatter(center[:,0],center[:,1],s = 80,c = 'y', marker = 's')
+    # plot
+    for i in range(k):
+        cluster = vectors[label.ravel() == i]
+        x = cluster[:, 0] * scale
+        y = cluster[:, 1] * scale
+        print('Cluster %d: %d points' % (i, len(x)))
+        c = np.random.random(3).reshape(1,3)
+        plt.scatter(x, y, c=c)
+    plt.scatter(center[:,0], center[:,1], s=1, c='y', marker='s')
     # plt.axis('equal')
+    plt.axis('off')
+    plt.savefig('clusters.png', bbox_inches='tight', pad_inches=0)
     # plt.show()
 
 
+    # crop the white borders of the matplotlib fig
+    clusters = cv2.imread("clusters.png", cv2.IMREAD_COLOR)
+    gray = cv2.cvtColor(clusters, cv2.COLOR_BGR2GRAY)
+    gray[gray == 255] = 0
+    clusters = crop_image(clusters, gray)
+
+    # resize to fit to original image, and combine together
+    clusters = cv2.resize(clusters, (img.shape[1], img.shape[0]))
+    combined = cv2.addWeighted(img, 0.5, clusters, 0.5, 0)
+
+    # display in a nice format
+    imgs = [img, clusters, combined]
+    titles = ["Original", "Clustered", "Combined"]
+    plot_multiple(imgs, 1, 3, titles, save=True, save_name="Final.png")
 
 
 # =============================================================================
 if __name__ == "__main__":
     k, img = arg_parse()
-    img = np.ones((5, 8, 3))
-    img[:,:,1] *= 2
-    img[:,:,2] *= 3
+    print(img.shape)
     vectors = get_vectors(img)
+
+    cluster(img, vectors, k)
 
     # test_split(img)
