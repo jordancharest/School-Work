@@ -13,7 +13,7 @@ def arg_parse():
 
     else:
         print("Invalid Argument(s).")
-        print("USAGE: {} <image> <pixel-coordinates-file>")
+        print("USAGE: {} <image> <pixel-coordinates-file>".format(argv[0]))
         exit()
 
 # -----------------------------------------------------------------------------
