@@ -72,7 +72,6 @@ def read_rectangles(filename):
     # foreground rectangles there are
     with open(filename, "r") as file:
         numbers = file.readline().split()
-        print(numbers)
         for i in range(len(numbers)):
             if numbers[i].lower() == "foreground":
                 num_foreground = int(numbers[i+1])
@@ -80,9 +79,14 @@ def read_rectangles(filename):
     all_rectangles = np.loadtxt(filename, dtype=np.int32)
 
     # first row is boundary, then foreground rows, the rest are background
-    boundary = all_rectangles[0, :]
-    foreground = all_rectangles[1:num_foreground+1, :]
-    background = all_rectangles[num_foreground+1:, :]
+    foreground = []
+    background = []
+    if len(all_rectangles.shape) > 1:
+        boundary = all_rectangles[0, :]
+        foreground = all_rectangles[1:num_foreground+1, :]
+        background = all_rectangles[num_foreground+1:, :]
+    else:
+        boundary = all_rectangles
 
     return boundary, foreground, background
 
@@ -145,6 +149,15 @@ def segment(img, boundary, foreground, background):
 # =============================================================================
 if __name__ == "__main__":
     img, pixel_file = arg_parse()
+
+    # reduce size
+    h,w = img.shape[:2]
+    while max(h,w) > 600:
+        h //= 2
+        w //= 2
+    img = cv2.resize(img,(w, h), interpolation = cv2.INTER_CUBIC)
+
+    # read, draw, and save user defined rectangles
     boundary, foreground, background = read_rectangles(pixel_file)
     draw_rectangles(img, boundary, foreground, background)
 
@@ -157,5 +170,5 @@ if __name__ == "__main__":
 
     # save result
     cv2.imwrite("segmented.jpg", segmented)
-    show_with_pixel_values(img)
+    # show_with_pixel_values(img)
     # show_with_pixel_values(segmented)
