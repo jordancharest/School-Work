@@ -59,12 +59,13 @@ def plot_multiple(images, rows, cols, titles=[], figsize=(20,10), fontsize=30,
         return
 
     for j, img in enumerate(images):
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         axs[j].imshow(img)
         if titles:
             axs[j].set_title(titles[j], fontsize=fontsize)
 
     if save:
-        plt.savefig(save_name)
+        plt.savefig(save_name, bbox_inches='tight', pad_inches=0)
 
 # -----------------------------------------------------------------------------
 def read_rectangles(filename):
@@ -111,8 +112,8 @@ def draw_rectangles(img, boundary, foreground, background):
         pt1 = tuple(row[:2])
         pt2 = tuple(row[2:])
         boundary_img = cv2.rectangle(boundary_img, pt1, pt2, color=(0,0,255), thickness=1)
-
-    cv2.imwrite("boundary.jpg", boundary_img)    
+    
+    return boundary_img   
 
 # -----------------------------------------------------------------------------
 def segment(img, boundary, foreground, background):
@@ -159,7 +160,7 @@ if __name__ == "__main__":
 
     # read, draw, and save user defined rectangles
     boundary, foreground, background = read_rectangles(pixel_file)
-    draw_rectangles(img, boundary, foreground, background)
+    boundary_img = draw_rectangles(img, boundary, foreground, background)
 
     print("Boundary:\n", boundary)
     print("Foreground:\n", foreground)
@@ -169,6 +170,8 @@ if __name__ == "__main__":
     segmented = segment(img, boundary, foreground, background)
 
     # save result
-    cv2.imwrite("segmented.jpg", segmented)
-    # show_with_pixel_values(img)
-    # show_with_pixel_values(segmented)
+    imgs = [img, boundary_img, segmented]
+    titles = ["Original", "Boundaries Marked", "Segmented"]
+    plot_multiple(imgs, 1, 3, titles, save=True, save_name="grabcut.png")
+
+    # cv2.imwrite("segmented.jpg", segmented)
