@@ -40,12 +40,13 @@ def plot_multiple(images, rows, cols, titles=[], figsize=(20,10), fontsize=30,
         return
 
     for j, img in enumerate(images):
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         axs[j].imshow(img)
         if titles:
             axs[j].set_title(titles[j], fontsize=fontsize)
 
     if save:
-        plt.savefig(save_name)
+        plt.savefig(save_name, bbox_inches='tight', pad_inches=0)
 
 # -----------------------------------------------------------------------------
 def get_vectors(img):
@@ -66,7 +67,8 @@ def get_vectors(img):
     
     # stack them on the actual RGB values
     # place x and y first so that we can
-    vectors = np.dstack((XX/scale, YY/scale, img, std_dev))
+    # vectors = np.dstack((XX/scale, YY/scale, img, std_dev))
+    vectors = np.dstack((XX/scale, YY/scale, img))
 
     # reshape into individual pixel / coordinate vectors
     vectors = np.reshape(vectors, (-1, vectors.shape[-1]))
@@ -84,7 +86,7 @@ def cluster(img, vectors, k):
     ret, label, center = cv2.kmeans(vectors.astype(np.float32), k, None, criteria,
                                     num_reinitializations, initialization_method)
     center *= scale
-    print(center)
+    print("Centers:\n", center)
 
     # plot
     for i in range(k):
@@ -114,7 +116,7 @@ def cluster(img, vectors, k):
     # display in a nice format
     imgs = [img, clusters, combined]
     titles = ["Original", "Clustered", "Combined"]
-    plot_multiple(imgs, 1, 3, titles, save=True, save_name="Final.png")
+    plot_multiple(imgs, 1, 3, titles, save=True, save_name="kmeans_combined.png")
 
 
 # =============================================================================
