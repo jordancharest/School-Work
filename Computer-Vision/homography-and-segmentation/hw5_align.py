@@ -97,6 +97,8 @@ def find_match(img1, img2, kp1, kp2, good, stats1, stats2):
         stats2['homography'].append(H)
         # stitch(img2, img1, H, mosaic_num)
     else:
+        # stats1['homography'].append(np.ndarray([]))
+        # stats2['homography'].append(np.ndarray([]))
         print("These two images would not make a good mosaic")
 
     # dst = cv2.perspectiveTransform(pts,M)
@@ -116,44 +118,39 @@ def calculate_transformation(src_pts, dst_pts, kind="F"):
 
     matches_mask = mask.ravel().tolist()
     num_matches = np.sum(matches_mask)
-    print("Original: ", len(matches_mask))
-    print("Survived: ", num_matches)
+    print("Original Keypoints: ", len(matches_mask))
+    print("Survived RANSAC   : ", num_matches)
 
     return M, matches_mask, num_matches
 
 # -----------------------------------------------------------------------------
-def stitch(img1, img2, H, i, initial_offset):
-    # h,w = img1.shape
-    # pts = np.float32([ [0,0],[0,h-1],[w-1,h-1],[w-1,0] ]).reshape(-1,1,2)
-    # dst = cv2.perspectiveTransform(pts, F)
-    print("Initial Offsets:", initial_offset)
+def stitch(canvas, img2, limits, H, i):
+    h1, w1 = img1.shape[:2]
+    # h2, w2 = img2.shape[:2]
 
+    # corners1 = np.float32([[0,0], [0,h1], [w1,h1], [w1,0]]).reshape(-1,1,2)
+    # corners2 = np.float32([[0,0], [0,h2], [w2,h2], [w2,0]]).reshape(-1,1,2)
+    # corners2 = cv2.perspectiveTransform(corners2, H)
+    # limits = np.concatenate((corners1, corners2), axis=0)
 
-    rows1, cols1 = img1.shape[:2]
-    rows2, cols2 = img2.shape[:2]
+    # print(limits)
 
-    list_of_points_1 = np.float32([[0,0], [0,rows1], [cols1,rows1], [cols1,0]]).reshape(-1,1,2)
-    temp_points = np.float32([[0,0], [0,rows2], [cols2,rows2], [cols2,0]]).reshape(-1,1,2)
-    list_of_points_2 = cv2.perspectiveTransform(temp_points, H)
-    list_of_points = np.concatenate((list_of_points_1, list_of_points_2), axis=0)
+    # [x_min, y_min] = np.int32(limits.min(axis=0).ravel() - 0.5)
+    # [x_max, y_max] = np.int32(limits.max(axis=0).ravel() + 0.5)
 
-    [x_min, y_min] = np.int32(list_of_points.min(axis=0).ravel() - 0.5)
-    [x_max, y_max] = np.int32(list_of_points.max(axis=0).ravel() + 0.5)
+    x_max, x_min, y_max, y_min = limits
+    print(x_max, x_min, y_max, y_min)
 
-    x_min -= initial_offset[0]
-    y_min -= initial_offset[1]
-    print("Offsets:", x_min, y_min)
-    translation_dist = [-x_min,-y_min]
-    # translation_dist[0] += initial_offset[0]
-    # translation_dist[1] += initial_offset[1]
-    H_translation = np.array([[1, 0, translation_dist[0]], [0, 1, translation_dist[1]], [0,0,1]])
+    translation = [-x_min,-y_min]
+    H_trans = np.array([[1, 0, translation[0]], [0, 1, translation[1]], [0,0,1]])
 
-    output_img = cv2.warpPerspective(img2, H_translation.dot(H), (x_max-x_min, y_max-y_min))
-    output_img[translation_dist[1]:rows1+translation_dist[1], translation_dist[0]:cols1+translation_dist[0]] = np.mean([img1,img2])
+    warped = cv2.warpPerspective(img2, H_trans.dot(H), (x_max-x_min, y_max-y_min))
+    canvas = np.max([canvas, warped], axis=0)
+    # output_img[translation[1]:h1+translation[1], translation[0]:w1+translation[0]] = img1
 
-    cv2.imwrite("Mosaic" + str(i) + ".jpg", output_img)
+    cv2.imwrite("Mosaic" + str(i) + ".jpg", canvas)
     
-    return output_img, translation_dist
+    return canvas
 
 
 # -----------------------------------------------------------------------------
@@ -198,28 +195,97 @@ def detect_and_match(color_img1, color_img2, stats1, stats2):
         print("Not enough matches are found - %d/%d" % (len(good),MIN_MATCH_COUNT))
         matchesMask = None
 
+
+# -----------------------------------------------------------------------------
+def find_translation(anchor, images, match_stats):
+    limits = None
+    # print(limits.shape)
+
+    # first find the images that are not directly connected to the anchor, but still
+    # have a path to the anchor
+    for j, img in enumerate(images):
+        if j not in anchor['img_matches'] and j != anchor['index']:
+            for k,m in enumerate(match_stats[j]['img_matches']):
+                if m in anchor['img_matches']:
+                    anchor['total_matches'] += 1
+                    match_stats[j]['total_matches'] += 1
+                    anchor['img_matches'].append(match_stats[j]['index'])
+                    match_stats[j]['img_matches'].append(anchor['index'])
+
+                    # update the homography to include two transformations
+                    anchor['homography'].append(anchor['homography'][k].dot(match_stats[j]['homography'][k]))
+                    match_stats[j]['homography'].append(anchor['homography'][k].dot(match_stats[j]['homography'][k]))
+
+
+
+
+    for j, img in enumerate(images):
+        if j == anchor['index']:
+            h,w = img.shape[:2]
+            corners = np.float32([[0,0], [0,h], [w,h], [w,0]]).reshape(-1,1,2)
+            if limits is None:
+                limits = corners
+            else:
+                limits = np.concatenate((limits, corners), axis=0)
+
+        elif j in anchor['img_matches']:
+            for i, k in enumerate(anchor['img_matches']):
+                if k == j:
+                    h,w = img.shape[:2]
+                    corners = np.float32([[0,0], [0,h], [w,h], [w,0]]).reshape(-1,1,2)
+
+                    if i < anchor['index']:
+                        corners = cv2.perspectiveTransform(corners, anchor['homography'][i])
+                    else:
+                        corners = cv2.perspectiveTransform(corners, np.linalg.inv(anchor['homography'][i]))
+
+                    if limits is None:
+                        limits = corners
+                    else:
+                        limits = np.concatenate((limits, corners), axis=0)
+
+    # print(limits)
+
+    [x_min, y_min] = np.int32(limits.min(axis=0).ravel() - 0.5)
+    [x_max, y_max] = np.int32(limits.max(axis=0).ravel() + 0.5)
+
+    return x_max, x_min, y_max, y_min
+
 # -----------------------------------------------------------------------------
 def build_mosaic(images, match_stats):
     anchor = match_stats[0]
     anchor_img = images[anchor['index']]
     print("\nAnchor:", anchor['name'])
 
-    # map adjacent images on the anchor
+    limits = find_translation(anchor, images, match_stats)
+    x_max, x_min, y_max, y_min = limits
+    canvas = np.zeros((y_max-y_min, x_max-x_min, 3))
+
+    # print("Limits: ", limits)
+
+    # paint anchor on the canvas
+    h1,w1 = anchor_img.shape[:2]
+    translation = [-x_min,-y_min]
+    canvas[translation[1]:h1+translation[1], translation[0]:w1+translation[0]] = anchor_img
+
+
+
+    # paint every other matching image on the canvas
     j = 0
     for i in anchor['img_matches']:
         # first time through need to make the mosaic
         if j == 0:
             if i < anchor['index']:
-                result, offset = stitch(anchor_img, images[i], anchor['homography'][j], j, [0,0])
+                canvas = stitch(canvas, images[i], limits, anchor['homography'][j], j)
             else:
-                result, offset = stitch(anchor_img, images[i], np.linalg.inv(anchor['homography'][j]), j, [0,0])
+                canvas = stitch(canvas, images[i], limits, np.linalg.inv(anchor['homography'][j]), j)
 
         # then add on to the existing mosaic
         else:
             if i < anchor['index']:
-                result, translation_dist = stitch(result, images[i], anchor['homography'][j], j, offset)
+                canvas = stitch(canvas, images[i], limits, anchor['homography'][j], j)
             else:
-                result, translation_dist = stitch(result, images[i], np.linalg.inv(anchor['homography'][j]), j, offset)
+                canvas = stitch(canvas, images[i], limits, np.linalg.inv(anchor['homography'][j]), j)
 
         j += 1
 
