@@ -10,8 +10,8 @@ import cv2
 # some tunable params
 MIN_MATCH_COUNT = 25
 LOWE_RATIO = 0.7
-FM_RANSAC_THRESHOLD = 0.5
-H_RANSAC_THRESHOLD = 1.5
+FM_RANSAC_THRESHOLD = 0.3
+H_RANSAC_THRESHOLD = 1.0
 F_TO_H_THRESHOLD = 0.75
 
 # -----------------------------------------------------------------------------
@@ -31,7 +31,6 @@ def arg_parse():
 
 # -----------------------------------------------------------------------------
 def get_output_names(name_list):
-
     output_names = []
     for i, name in enumerate(name_list):
         _, filename = ntpath.split(name)
@@ -88,22 +87,15 @@ def find_match(img1, img2, kp1, kp2, good, stats1, stats2):
     ratio = num_H_matches / num_F_matches
     max_matches = max(num_H_matches, num_F_matches)
 
-    if max_matches > 0.4*len(good) and (ratio > F_TO_H_THRESHOLD or num_H_matches > 200):
+    if max_matches > 0.33*len(good) and (ratio > F_TO_H_THRESHOLD or num_H_matches > 200):
         stats1['total_matches'] += num_H_matches
         stats2['total_matches'] += num_H_matches
         stats1['img_matches'].append(stats2['index'])
         stats2['img_matches'].append(stats1['index'])
         stats1['homography'].append(H)
         stats2['homography'].append(H)
-        # stitch(img2, img1, H, mosaic_num)
     else:
-        # stats1['homography'].append(np.ndarray([]))
-        # stats2['homography'].append(np.ndarray([]))
         print("These two images would not make a good mosaic")
-
-    # dst = cv2.perspectiveTransform(pts,M)
-    # img2 = cv2.polylines(img2,[np.int32(dst)],True,255,3, cv2.LINE_AA)
-
 
 # -----------------------------------------------------------------------------
 def calculate_transformation(src_pts, dst_pts, kind="F"):
@@ -126,28 +118,18 @@ def calculate_transformation(src_pts, dst_pts, kind="F"):
 # -----------------------------------------------------------------------------
 def stitch(canvas, img2, limits, H, i):
     h1, w1 = img1.shape[:2]
-    # h2, w2 = img2.shape[:2]
-
-    # corners1 = np.float32([[0,0], [0,h1], [w1,h1], [w1,0]]).reshape(-1,1,2)
-    # corners2 = np.float32([[0,0], [0,h2], [w2,h2], [w2,0]]).reshape(-1,1,2)
-    # corners2 = cv2.perspectiveTransform(corners2, H)
-    # limits = np.concatenate((corners1, corners2), axis=0)
-
-    # print(limits)
-
-    # [x_min, y_min] = np.int32(limits.min(axis=0).ravel() - 0.5)
-    # [x_max, y_max] = np.int32(limits.max(axis=0).ravel() + 0.5)
-
     x_max, x_min, y_max, y_min = limits
     print(x_max, x_min, y_max, y_min)
 
     translation = [-x_min,-y_min]
     H_trans = np.array([[1, 0, translation[0]], [0, 1, translation[1]], [0,0,1]])
-
     warped = cv2.warpPerspective(img2, H_trans.dot(H), (x_max-x_min, y_max-y_min))
-    canvas = np.max([canvas, warped], axis=0)
-    # output_img[translation[1]:h1+translation[1], translation[0]:w1+translation[0]] = img1
 
+    overlap = np.where((canvas > 0) & (warped > 0), True, False)
+    temp = cv2.addWeighted(canvas[overlap], 0.5, warped[overlap].astype(np.float64), 0.5, 0)
+    canvas = cv2.addWeighted(canvas, 1.0, warped.astype(np.float64), 1.0, 0)
+    canvas[overlap] = temp.ravel()
+    
     cv2.imwrite("Mosaic" + str(i) + ".jpg", canvas)
     
     return canvas
@@ -216,9 +198,8 @@ def find_translation(anchor, images, match_stats):
                     anchor['homography'].append(anchor['homography'][k].dot(match_stats[j]['homography'][k]))
                     match_stats[j]['homography'].append(anchor['homography'][k].dot(match_stats[j]['homography'][k]))
 
-
-
-
+    # then determine the min and max limits of the canvas needed to fit all
+    # the transformed images
     for j, img in enumerate(images):
         if j == anchor['index']:
             h,w = img.shape[:2]
@@ -244,8 +225,6 @@ def find_translation(anchor, images, match_stats):
                     else:
                         limits = np.concatenate((limits, corners), axis=0)
 
-    # print(limits)
-
     [x_min, y_min] = np.int32(limits.min(axis=0).ravel() - 0.5)
     [x_max, y_max] = np.int32(limits.max(axis=0).ravel() + 0.5)
 
@@ -261,35 +240,21 @@ def build_mosaic(images, match_stats):
     x_max, x_min, y_max, y_min = limits
     canvas = np.zeros((y_max-y_min, x_max-x_min, 3))
 
-    # print("Limits: ", limits)
-
-    # paint anchor on the canvas
+    # paint anchor on the canvas, no transformation/warping
     h1,w1 = anchor_img.shape[:2]
     translation = [-x_min,-y_min]
     canvas[translation[1]:h1+translation[1], translation[0]:w1+translation[0]] = anchor_img
 
-
-
     # paint every other matching image on the canvas
     j = 0
     for i in anchor['img_matches']:
-        # first time through need to make the mosaic
-        if j == 0:
-            if i < anchor['index']:
-                canvas = stitch(canvas, images[i], limits, anchor['homography'][j], j)
-            else:
-                canvas = stitch(canvas, images[i], limits, np.linalg.inv(anchor['homography'][j]), j)
-
-        # then add on to the existing mosaic
+        # the order of the images will depend on
+        if i < anchor['index']:
+            canvas = stitch(canvas, images[i], limits, anchor['homography'][j], j)
         else:
-            if i < anchor['index']:
-                canvas = stitch(canvas, images[i], limits, anchor['homography'][j], j)
-            else:
-                canvas = stitch(canvas, images[i], limits, np.linalg.inv(anchor['homography'][j]), j)
+            canvas = stitch(canvas, images[i], limits, np.linalg.inv(anchor['homography'][j]), j)
 
         j += 1
-
-
 
 
 # =============================================================================
@@ -333,9 +298,6 @@ if __name__ == "__main__":
             else:
                 img2 = images[j]
 
-            # out_name1, out_name2, ext = get_output_names((img_name1, img_name2))
-
-
             # detect and match keypoints between the two images, return
             # characteristics about the match
             detect_and_match(img1, img2, match_stats[i], match_stats[j])
@@ -354,9 +316,4 @@ if __name__ == "__main__":
             else:
                 print("  {0} :  {1}".format(k.ljust(13),v))
 
-
     build_mosaic(images, match_stats)
-
-
-
-
