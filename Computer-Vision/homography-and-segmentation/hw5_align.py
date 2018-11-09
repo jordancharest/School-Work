@@ -4,7 +4,6 @@ import os
 import ntpath
 
 import numpy as np
-from scipy import spatial
 import cv2
 
 # some tunable params
@@ -87,7 +86,10 @@ def find_match(img1, img2, kp1, kp2, good, stats1, stats2):
     ratio = num_H_matches / num_F_matches
     max_matches = max(num_H_matches, num_F_matches)
 
-    if max_matches > 0.33*len(good) and (ratio > F_TO_H_THRESHOLD or num_H_matches > 200):
+    if max_matches > 0.33*len(good) and \
+        (ratio > F_TO_H_THRESHOLD or num_H_matches > 200) and \
+        num_H_matches > 50:
+        
         stats1['total_matches'] += num_H_matches
         stats2['total_matches'] += num_H_matches
         stats1['img_matches'].append(stats2['index'])
