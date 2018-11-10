@@ -10,8 +10,8 @@ import cv2
 MIN_MATCH_COUNT = 25
 LOWE_RATIO = 0.7
 FM_RANSAC_THRESHOLD = 0.3
-H_RANSAC_THRESHOLD = 1.0
-F_TO_H_THRESHOLD = 0.75
+H_RANSAC_THRESHOLD = 0.5
+F_TO_H_THRESHOLD = 0.1
 
 # -----------------------------------------------------------------------------
 def arg_parse():
@@ -86,8 +86,8 @@ def find_match(img1, img2, kp1, kp2, good, stats1, stats2):
     ratio = num_H_matches / num_F_matches
     max_matches = max(num_H_matches, num_F_matches)
 
-    if max_matches > 0.33*len(good) and \
-        (ratio > F_TO_H_THRESHOLD or num_H_matches > 200) and \
+    # if max_matches > 0.33*len(good) and \
+    if (ratio > F_TO_H_THRESHOLD or num_H_matches > 200) and \
         num_H_matches > 50:
         
         stats1['total_matches'] += num_H_matches
@@ -123,10 +123,12 @@ def stitch(canvas, img2, limits, H, i):
     x_max, x_min, y_max, y_min = limits
     print(x_max, x_min, y_max, y_min)
 
+    # warp the new image onto a black canvas the same size as the original canvas
     translation = [-x_min,-y_min]
     H_trans = np.array([[1, 0, translation[0]], [0, 1, translation[1]], [0,0,1]])
     warped = cv2.warpPerspective(img2, H_trans.dot(H), (x_max-x_min, y_max-y_min))
 
+    # combine
     overlap = np.where((canvas > 0) & (warped > 0), True, False)
     temp = cv2.addWeighted(canvas[overlap], 0.5, warped[overlap].astype(np.float64), 0.5, 0)
     canvas = cv2.addWeighted(canvas, 1.0, warped.astype(np.float64), 1.0, 0)
@@ -147,8 +149,8 @@ def detect_and_match(color_img1, color_img2, stats1, stats2):
     img2 = cv2.cvtColor(color_img2, cv2.COLOR_BGR2GRAY)
     
     # detect keypoints and compute and descriptors for each image
-    # detector = cv2.xfeatures2d.SURF_create()
-    detector = cv2.xfeatures2d.SIFT_create()
+    detector = cv2.xfeatures2d.SURF_create()
+    # detector = cv2.xfeatures2d.SIFT_create()
     kp1, des1 = detector.detectAndCompute(img1, None)
     kp2, des2 = detector.detectAndCompute(img2, None)
 
