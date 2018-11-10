@@ -9,8 +9,8 @@ import cv2
 # some tunable params
 MIN_MATCH_COUNT = 25
 LOWE_RATIO = 0.7
-FM_RANSAC_THRESHOLD = 0.3
-H_RANSAC_THRESHOLD = 0.5
+FM_RANSAC_THRESHOLD = 0.5
+H_RANSAC_THRESHOLD = 1.2
 F_TO_H_THRESHOLD = 0.1
 
 # -----------------------------------------------------------------------------
@@ -118,7 +118,7 @@ def calculate_transformation(src_pts, dst_pts, kind="F"):
     return M, matches_mask, num_matches
 
 # -----------------------------------------------------------------------------
-def stitch(canvas, img2, limits, H, i):
+def stitch(canvas, img2, limits, H, name):
     h1, w1 = img1.shape[:2]
     x_max, x_min, y_max, y_min = limits
     print(x_max, x_min, y_max, y_min)
@@ -134,7 +134,7 @@ def stitch(canvas, img2, limits, H, i):
     canvas = cv2.addWeighted(canvas, 1.0, warped.astype(np.float64), 1.0, 0)
     canvas[overlap] = temp.ravel()
     
-    cv2.imwrite("Mosaic" + str(i) + ".jpg", canvas)
+    cv2.imwrite(name + ".jpg", canvas)
     
     return canvas
 
@@ -235,8 +235,8 @@ def find_translation(anchor, images, match_stats):
     return x_max, x_min, y_max, y_min
 
 # -----------------------------------------------------------------------------
-def build_mosaic(images, match_stats):
-    anchor = match_stats[0]
+def build_mosaic(images, match_stats, anchor):
+    # anchor = match_stats[0]
     anchor_img = images[anchor['index']]
     print("\nAnchor:", anchor['name'])
 
@@ -250,13 +250,16 @@ def build_mosaic(images, match_stats):
     canvas[translation[1]:h1+translation[1], translation[0]:w1+translation[0]] = anchor_img
 
     # paint every other matching image on the canvas
+    names = [anchor["name"]]
     j = 0
     for i in anchor['img_matches']:
+        names.append(match_stats[i]["name"])
+        names.sort()
         # the order of the images will depend on
         if i < anchor['index']:
-            canvas = stitch(canvas, images[i], limits, anchor['homography'][j], j)
+            canvas = stitch(canvas, images[i], limits, anchor['homography'][j], "_".join(names))
         else:
-            canvas = stitch(canvas, images[i], limits, np.linalg.inv(anchor['homography'][j]), j)
+            canvas = stitch(canvas, images[i], limits, np.linalg.inv(anchor['homography'][j]), "_".join(names))
 
         j += 1
 
@@ -310,9 +313,10 @@ if __name__ == "__main__":
 
     # use the match characteristics to determine how to build the mosaic(s)
     # the image with the highest number of matches will be the anchor
-    match_stats.sort(key = lambda k : k['total_matches'], reverse=True)
+    sorted_match_stats = deepcopy(match_stats)
+    sorted_match_stats.sort(key = lambda k : k['total_matches'], reverse=True)
     print("\n\nMatch Statistics (sorted):")
-    for d in match_stats:
+    for d in sorted_match_stats:
         print()
         for k, v in d.items():
             if k == 'homography':
@@ -320,4 +324,5 @@ if __name__ == "__main__":
             else:
                 print("  {0} :  {1}".format(k.ljust(13),v))
 
-    build_mosaic(images, match_stats)
+    anchor = sorted_match_stats[0]
+    build_mosaic(images, match_stats, anchor)
