@@ -67,8 +67,8 @@ def get_vectors(img):
     
     # stack them on the actual RGB values
     # place x and y first so that we can
-    # vectors = np.dstack((XX/scale, YY/scale, img, std_dev))
-    vectors = np.dstack((XX/scale, YY/scale, img))
+    vectors = np.dstack((XX/scale, YY/scale, img, std_dev))
+    # vectors = np.dstack((XX/scale, YY/scale, img))
 
     # reshape into individual pixel / coordinate vectors
     vectors = np.reshape(vectors, (-1, vectors.shape[-1]))
