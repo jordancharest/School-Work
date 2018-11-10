@@ -9,8 +9,8 @@ import cv2
 # some tunable params
 MIN_MATCH_COUNT = 25
 LOWE_RATIO = 0.7
-FM_RANSAC_THRESHOLD = 0.5
-H_RANSAC_THRESHOLD = 1.2
+FM_RANSAC_THRESHOLD = 0.3
+H_RANSAC_THRESHOLD = 0.5
 F_TO_H_THRESHOLD = 0.1
 
 # -----------------------------------------------------------------------------
@@ -67,7 +67,7 @@ def find_match(img1, img2, kp1, kp2, good, stats1, stats2):
     F, matches_mask, num_F_matches = calculate_transformation(src_pts,
                                                               dst_pts,
                                                               kind="F")
-    out_name = stats1['name'] + "_" + stats2['name'] + "_after_F_mat.jpg"
+    out_name = "./results/" + stats1['name'] + "_" + stats2['name'] + "_after_F_mat.jpg"
     draw_keypoint_matches(img1, kp1, img2, kp2, good, out_name,
                             matches_mask, color=(0,255,0))
 
@@ -77,7 +77,7 @@ def find_match(img1, img2, kp1, kp2, good, stats1, stats2):
     H, matches_mask, num_H_matches = calculate_transformation(src_pts,
                                                               dst_pts,
                                                               kind="H")
-    out_name = stats1['name'] + "_" + stats2['name'] + "_after_H_mat.jpg"
+    out_name = "./results/" + stats1['name'] + "_" + stats2['name'] + "_after_H_mat.jpg"
     draw_keypoint_matches(img1, kp1, img2, kp2, good, out_name,
                             matches_mask, color=(255,0,0))
 
@@ -134,7 +134,7 @@ def stitch(canvas, img2, limits, H, name):
     canvas = cv2.addWeighted(canvas, 1.0, warped.astype(np.float64), 1.0, 0)
     canvas[overlap] = temp.ravel()
     
-    cv2.imwrite(name + ".jpg", canvas)
+    cv2.imwrite("./results/" + name + ".jpg", canvas)
     
     return canvas
 
@@ -169,7 +169,7 @@ def detect_and_match(color_img1, color_img2, stats1, stats2):
             good.append(m)
 
     # draw all keypoints that pass the ratio test
-    out_name = stats1['name'] + "_" + stats2['name'] + "_before_F_mat.jpg"
+    out_name = "./results/" + stats1['name'] + "_" + stats2['name'] + "_before_F_mat.jpg"
     draw_keypoint_matches(img1, kp1, img2, kp2, good, out_name, color=(0,0,255))
 
     # if the minimum threshold is met, calculate transformations and attempt
@@ -267,6 +267,11 @@ def build_mosaic(images, match_stats, anchor):
 # =============================================================================
 if __name__ == "__main__":
     img_list = arg_parse()
+
+    # Create target directory if it doesn't exist
+    dir_name = "results"
+    if not os.path.exists(dir_name):
+        os.mkdir(dir_name)
 
     # hold all images and statistics about the match quality
     images = [None] * len(img_list)
