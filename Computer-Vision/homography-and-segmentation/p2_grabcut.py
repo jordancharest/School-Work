@@ -89,6 +89,9 @@ def read_rectangles(filename):
     else:
         boundary = all_rectangles
 
+    print("{} sure foreground rectangles".format(len(foreground)))
+    print("{} sure background rectangles\n".format(len(background)))
+
     return boundary, foreground, background
 
 
@@ -125,7 +128,8 @@ def segment(img, boundary, foreground, background):
     # mask the boundary rectangle as probable foreground
     x1,y1,x2,y2 = boundary
     mask[y1:y2, x1:x2] = cv2.GC_PR_FGD
-    
+    print("\nTotal pixels in probable foreground: {}".format((abs(x1-x2)* abs(y1-y2))))
+
     # set definite foreground masks
     for x1,y1,x2,y2 in foreground:
         mask[y1:y2, x1:x2] = cv2.GC_FGD
@@ -144,6 +148,7 @@ def segment(img, boundary, foreground, background):
 
     mask = np.where((mask==2)|(mask==0),0,1).astype('uint8')
     img = img*mask[:,:,np.newaxis]
+    print("Remaining foreground pixels after segmentation: {}".format(np.count_nonzero(img)//3))
 
     return img
 
