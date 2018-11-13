@@ -86,6 +86,7 @@ def cluster(img, vectors, k):
     ret, label, center = cv2.kmeans(vectors.astype(np.float32), k, None, criteria,
                                     num_reinitializations, initialization_method)
     center *= scale
+    print("Segmenting into {} clusters".format(k))
     print("Centers:\n", center)
 
     # plot
