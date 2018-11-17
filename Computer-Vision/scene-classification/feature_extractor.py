@@ -1,7 +1,6 @@
 from sys import argv
 import glob
 import os
-import pickle
 import time
 
 import numpy as np
@@ -89,6 +88,7 @@ def extract_features(img_list, cspace='BGR'):
         feature_vector = get_feature_vector(img)
         features.append(feature_vector)
 
+    features = np.array(features)
     return features
 
 # =============================================================================
@@ -107,7 +107,7 @@ if __name__ == "__main__":
     for j, img_set in enumerate(all_imgs):
         start = time.time()
         features = extract_features(img_set)
-        pickle.dump(features, open("./features/train_" + names[j] + ".p", "wb"))
+        np.save("./features/train_" + names[j], features)
         print(round(time.time()-start, 2), "seconds to extract", names[j], "train features...")
 
     # get feature vectors for each image in the test set
@@ -116,5 +116,5 @@ if __name__ == "__main__":
     for j, img_set in enumerate(all_imgs):
         start = time.time()
         features = extract_features(img_set)
-        pickle.dump(features, open("./features/test_" + names[j] + ".p", "wb"))
+        np.save("./features/test_" + names[j], features)
         print(round(time.time()-start, 2), "seconds to extract", names[j], "test features...")    
