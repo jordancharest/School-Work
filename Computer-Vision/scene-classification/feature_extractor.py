@@ -2,13 +2,22 @@ from sys import argv
 import glob
 import os
 import time
+
+from skimage.feature import hog
 import numpy as np
 import cv2
+
+
 
 # tunable parameters
 t = 4
 bh = 4  # number of blocks in image height direction
 bw = 4  # number of blocks in image width direction
+
+# for HoG extraction
+orient = 11
+pix_per_cell = 16
+cell_per_block = 2
 
 # -----------------------------------------------------------------------------
 def arg_parse():
@@ -18,22 +27,22 @@ def arg_parse():
 
     elif len(argv) == 4:
         _, training_data, test_data, parameter = argv
-        if parameter == "hog":
+        if parameter == "use-hog":
             return training_data, test_data, None, True
         else:
             return training_data, test_data, parameter, False
 
     elif len(argv) == 5:
-        _, training_data, test_data, colorspace, hog = argv
-        if hog == "hog":
+        _, training_data, test_data, colorspace, use_hog = argv
+        if use_hog == "use-hog":
             return training_data, test_data, colorspace, True
         else:
-            print("Unknown parameter. use HoG features type 'hog'")
+            print("Unknown parameter. To use HoG features type 'use-hog'")
             exit()
 
     else:
         print("Invalid Argument(s).")
-        print("USAGE: {} <training-data> <test-data> [<colorspace> <hog>]".format(argv[0]))
+        print("USAGE: {} <training-data> <test-data> [<colorspace> <use-hog>]".format(argv[0]))
         exit()
 
 # -----------------------------------------------------------------------------
@@ -54,7 +63,26 @@ def get_img_names(root_dir):
     return grass, ocean, redcarpet, road, wheatfield
 
 # -----------------------------------------------------------------------------
-def get_feature_vector(img):
+def get_hog_features(img):
+    hog_img = cv2.resize(img, (48, 72))
+    # Best so far: YCrCb - can be RGB, HSV, LUV, HLS, YUV, YCrCb
+    hog_img = cv2.cvtColor(hog_img, cv2.COLOR_BGR2LUV)
+
+    hog_features = []
+    for channel in range(hog_img.shape[2]):
+        features = hog(hog_img[:, :, channel],
+                        orientations=orient, 
+                        pixels_per_cell=(pix_per_cell, pix_per_cell),
+                        cells_per_block=(cell_per_block, cell_per_block),
+                        transform_sqrt=False, 
+                        feature_vector=True)
+        hog_features.append(features)
+
+    hog_features = np.ravel(hog_features)
+    return hog_features
+
+# -----------------------------------------------------------------------------
+def get_feature_vector(img, use_hog=False):
     dh = int(img.shape[0] / (bh + 1))
     dw = int(img.shape[1] / (bw + 1))
     block_size = (2*dh, 2*dw)
@@ -72,15 +100,20 @@ def get_feature_vector(img):
             # compute histogram of the block and 'concatenate'
             hist, _ = np.histogramdd(pixels, (t, t, t))
             hist = hist.ravel()
+
             feature_vector.append(hist)
 
     # fix the shape - unraveled numpy array
-    feature_vector = np.array(feature_vector)
-    feature_vector = feature_vector.ravel()
+    feature_vector = np.ravel(feature_vector)
+
+    if use_hog:
+        hog_features = get_hog_features(img)
+        feature_vector = np.hstack((feature_vector, hog_features))
+
     return feature_vector
 
 # -----------------------------------------------------------------------------
-def extract_features(img_list, cspace=None, hog=False):
+def extract_features(img_list, cspace=None, use_hog=False):
     features = []
     
     for i, img_name in enumerate(img_list):
@@ -99,7 +132,7 @@ def extract_features(img_list, cspace=None, hog=False):
             elif cspace == 'YCrCb':
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb)
 
-        feature_vector = get_feature_vector(img, hog)
+        feature_vector = get_feature_vector(img, use_hog)
         features.append(feature_vector)
 
     features = np.array(features)
@@ -107,7 +140,7 @@ def extract_features(img_list, cspace=None, hog=False):
 
 # =============================================================================
 if __name__ == "__main__":
-    training_data, test_data, colorspace, hog = arg_parse()
+    training_data, test_data, colorspace, use_hog = arg_parse()
     if colorspace:
         print("Using the {} colorspace".format(colorspace))
     names = ["grass", "ocean", "redcarpet", "road", "wheatfield"]
@@ -122,7 +155,7 @@ if __name__ == "__main__":
     all_imgs = get_img_names(training_data)
     for j, img_set in enumerate(all_imgs):
         start = time.time()
-        features = extract_features(img_set, colorspace, hog)
+        features = extract_features(img_set, colorspace, use_hog)
 
         np.save("./features/train_" + names[j], features)
         print(round(time.time()-start, 2), "seconds to extract", names[j], "train features...")
@@ -132,7 +165,7 @@ if __name__ == "__main__":
     all_imgs = get_img_names(test_data)
     for j, img_set in enumerate(all_imgs):
         start = time.time()
-        features = extract_features(img_set, colorspace, hog)
+        features = extract_features(img_set, colorspace, use_hog)
 
         np.save("./features/test_" + names[j], features)
         print(round(time.time()-start, 2), "seconds to extract", names[j], "test features...")    
