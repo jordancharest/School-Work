@@ -14,11 +14,26 @@ bw = 4  # number of blocks in image width direction
 def arg_parse():
     if len(argv) == 3:
         _, training_data, test_data = argv
-        return training_data, test_data
+        return training_data, test_data, None, False
+
+    elif len(argv) == 4:
+        _, training_data, test_data, parameter = argv
+        if parameter == "hog":
+            return training_data, test_data, None, True
+        else:
+            return training_data, test_data, parameter, False
+
+    elif len(argv) == 5:
+        _, training_data, test_data, colorspace, hog = argv
+        if hog == "hog":
+            return training_data, test_data, colorspace, True
+        else:
+            print("Unknown parameter. use HoG features type 'hog'")
+            exit()
 
     else:
         print("Invalid Argument(s).")
-        print("USAGE: {} <training-data-directory>".format(argv[0]))
+        print("USAGE: {} <training-data> <test-data> [<colorspace> <hog>]".format(argv[0]))
         exit()
 
 # -----------------------------------------------------------------------------
@@ -65,14 +80,14 @@ def get_feature_vector(img):
     return feature_vector
 
 # -----------------------------------------------------------------------------
-def extract_features(img_list, cspace='BGR'):
+def extract_features(img_list, cspace=None, hog=False):
     features = []
     
     for i, img_name in enumerate(img_list):
         img = cv2.imread(img_name, cv2.IMREAD_COLOR)
 
         # to test out some color conversions
-        if cspace != 'RGB' or cspace != 'BGR':
+        if cspace != 'RGB' or cspace != 'BGR' or cspace != None:
             if cspace == 'HSV':
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
             elif cspace == 'LUV':
@@ -84,7 +99,7 @@ def extract_features(img_list, cspace='BGR'):
             elif cspace == 'YCrCb':
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb)
 
-        feature_vector = get_feature_vector(img)
+        feature_vector = get_feature_vector(img, hog)
         features.append(feature_vector)
 
     features = np.array(features)
@@ -92,7 +107,9 @@ def extract_features(img_list, cspace='BGR'):
 
 # =============================================================================
 if __name__ == "__main__":
-    training_data, test_data = arg_parse()
+    training_data, test_data, colorspace, hog = arg_parse()
+    if colorspace:
+        print("Using the {} colorspace".format(colorspace))
     names = ["grass", "ocean", "redcarpet", "road", "wheatfield"]
 
     # Create target directory if it doesn't exist
@@ -105,7 +122,8 @@ if __name__ == "__main__":
     all_imgs = get_img_names(training_data)
     for j, img_set in enumerate(all_imgs):
         start = time.time()
-        features = extract_features(img_set)
+        features = extract_features(img_set, colorspace, hog)
+
         np.save("./features/train_" + names[j], features)
         print(round(time.time()-start, 2), "seconds to extract", names[j], "train features...")
 
@@ -114,6 +132,7 @@ if __name__ == "__main__":
     all_imgs = get_img_names(test_data)
     for j, img_set in enumerate(all_imgs):
         start = time.time()
-        features = extract_features(img_set)
+        features = extract_features(img_set, colorspace, hog)
+
         np.save("./features/test_" + names[j], features)
         print(round(time.time()-start, 2), "seconds to extract", names[j], "test features...")    
