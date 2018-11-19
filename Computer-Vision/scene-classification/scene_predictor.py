@@ -55,7 +55,8 @@ def load_features(root_dir, kind, names):
 def find_best_parameters(X_train, y_train, X_test, y_test):
     # Applying Grid Search to find the best model and the best parameters
     classifier = SVC()
-    parameters = [{'C': [0.05, 1], 'kernel': ['linear']}]
+    parameters = [{'C': [0.01, 0.05], 'kernel': ['linear']},
+                  {'C': [0.01, 0.05], 'kernel': ['poly']}]
     # parameters = [{'C': [0.1, 1], 'kernel': ['rbf'], 'gamma': [0.1, 0.5, 0.9]}]
     grid_search = GridSearchCV(estimator = classifier,
                                param_grid = parameters,
@@ -76,7 +77,11 @@ def train(X_train, y_train, X_test, y_test):
     n_predict = 10
     random_test = random.sample(range(1, 100), n_predict)
 
-    classifier = LinearSVC(C=0.1)
+    class_weight = {0:0.5, 1:0.2, 2:0.3, 3:0.1, 4:0.15}
+    print(class_weight)
+    # class_weight='balanced'
+    # classifier = SVC(kernel='rbf', C = 0.001, gamma=0.01)
+    classifier = LinearSVC(C=0.001, class_weight=class_weight)
     t=time.time()
     classifier.fit(X_train, y_train)
     y_pred = classifier.predict(X_test)
@@ -114,11 +119,11 @@ if __name__ == "__main__":
     print("{0} {1}-length feature vectors in the training set".format(X_train.shape[0], X_train.shape[1]))
     print("{0} {1}-length feature vectors in the test set".format(X_test.shape[0], X_train.shape[1]))
 
-    # # Fit a per-column scaler
-    # scaler = StandardScaler().fit(X_train)
-    # # Apply the scaler to X
-    # X_train = scaler.transform(X_train)
-    # X_test = scaler.transform(X_test)
+    # Fit a per-column scaler
+    scaler = StandardScaler().fit(X_train)
+    # Apply the scaler to X
+    X_train = scaler.transform(X_train)
+    X_test = scaler.transform(X_test)
 
     if grid_search:
         print("\nBegin grid search...")
@@ -133,5 +138,6 @@ if __name__ == "__main__":
 
         # Confusion matrix
         cm = confusion_matrix(y_test, y_pred)
+        print("\nConfusion Matrix:")
         print(cm)
 
