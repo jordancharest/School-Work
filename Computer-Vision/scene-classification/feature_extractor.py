@@ -15,8 +15,13 @@ bh = 4  # number of blocks in image height direction
 bw = 4  # number of blocks in image width direction
 
 # for HoG extraction
+# best so far:
+# orient = 11
+# pix_per_cell = 16
+# cell_per_block = 2
+
 orient = 11
-pix_per_cell = 16
+pix_per_cell = 24
 cell_per_block = 2
 
 # -----------------------------------------------------------------------------
@@ -65,7 +70,6 @@ def get_img_names(root_dir):
 # -----------------------------------------------------------------------------
 def get_hog_features(img):
     hog_img = cv2.resize(img, (48, 72))
-    # Best so far: YCrCb - can be RGB, HSV, LUV, HLS, YUV, YCrCb
     hog_img = cv2.cvtColor(hog_img, cv2.COLOR_BGR2LUV)
 
     hog_features = []
