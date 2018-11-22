@@ -21,7 +21,7 @@ bw = 4  # number of blocks in image width direction
 # cell_per_block = 2
 
 orient = 11
-pix_per_cell = 24
+pix_per_cell = 16
 cell_per_block = 2
 
 # -----------------------------------------------------------------------------
