@@ -83,46 +83,50 @@ def make_label_vectors(length):
 # -----------------------------------------------------------------------------
 def train(X_train, y_train, m, n, learning_rate=1e-4, momentum=0.9):
     #  Set parameters to control the process
-    epochs = 100
+    epochs = 1000
     batch_size = 16
-    n_train = X_train.shape[0]
+    print(X_train.size())
+    n_train = X_train.size()[0]
     n_batches = int(np.ceil(n_train / batch_size))
     log_interval = 10
+
+    print("# batches:", n_batches)
+    print("# train:", n_train)
 
     model = FullyConnected(24,36)
     optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
     criterion = nn.MSELoss()
 
-    for ep in range(epochs):
+    for epoch in range(epochs):
         #  Create a random permutation of the indices of the row vectors
         indices = torch.randperm(n_train)
         
         #  Run through each mini-batch
-        for b in range(n_batches):
+        for batch_idx, b in enumerate(range(n_batches)):
             #  Use slicing (of the pytorch Variable) to extract the
             #  indices and then the data instances for the next mini-batch
             batch_indices = indices[b*batch_size: (b+1)*batch_size]
+            # print("Batch indices:", batch_indices)
             batch_X = X_train[batch_indices]
             batch_y = y_train[batch_indices]
             
 
+            optimizer.zero_grad()
             y_pred = model(batch_X)
-            print(batch_y.shape)
-            print(y_pred.shape)
+            # print(batch_y.shape)
+            # print(y_pred.shape)
 
             loss = criterion(y_pred, batch_y)
 
-            optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-            if batch_idx % log_interval == 0:
-                print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                        epoch, batch_idx * len(data), len(train_loader.dataset),
-                               100. * batch_idx / len(train_loader), loss.data[0]))
+        if epoch % log_interval == 0:
+            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+                    epoch, (batch_idx+1) * batch_size, n_train,
+                           100. * batch_idx / n_batches, loss.data[0]))
 
-
-
+    return model, optimizer, criterion
 
 
 # =============================================================================
@@ -148,6 +152,8 @@ if __name__ == "__main__":
         X_train.append(X)
 
     X_train = np.array(X_train)
+    X_train = X_train.reshape(X_train.shape[0] * X_train.shape[1], X_train.shape[2]) 
+
     X_train = Variable(torch.Tensor(X_train))
     y_train = Variable(torch.Tensor(y_train)) 
     model = train(X_train, y_train, m, n)
