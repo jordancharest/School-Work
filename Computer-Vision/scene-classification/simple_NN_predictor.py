@@ -94,7 +94,7 @@ def train(X_train, y_train, m, n, learning_rate=1e-4, momentum=0.9):
     print("# train:", n_train)
 
     model = FullyConnected(24,36)
-    optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     criterion = nn.MSELoss()
 
     for epoch in range(epochs):
@@ -103,21 +103,24 @@ def train(X_train, y_train, m, n, learning_rate=1e-4, momentum=0.9):
         
         #  Run through each mini-batch
         for batch_idx, b in enumerate(range(n_batches)):
+
+            # use the last batch of each epoch as validation set
+            if batch_idx == n_batches-1:
+                test(model, criterion, X_train[batch_indices], y_train[batch_indices])
+                continue
+
             #  Use slicing (of the pytorch Variable) to extract the
             #  indices and then the data instances for the next mini-batch
             batch_indices = indices[b*batch_size: (b+1)*batch_size]
-            # print("Batch indices:", batch_indices)
             batch_X = X_train[batch_indices]
             batch_y = y_train[batch_indices]
             
-
+            # zero gradients, make prediction on the batch
             optimizer.zero_grad()
             y_pred = model(batch_X)
-            # print(batch_y.shape)
-            # print(y_pred.shape)
 
+            # compute loss and back-propagate
             loss = criterion(y_pred, batch_y)
-
             loss.backward()
             optimizer.step()
 
@@ -127,6 +130,28 @@ def train(X_train, y_train, m, n, learning_rate=1e-4, momentum=0.9):
                            100. * batch_idx / n_batches, loss.data[0]))
 
     return model, optimizer, criterion
+
+
+# -----------------------------------------------------------------------------
+def test(model, criterion, X_test, y_test):
+    # run a test loop
+    test_loss = 0
+    correct = 0
+
+    for X, y in zip(X_test, y_test):
+        y_pred = model(X)
+
+        # sum up batch loss
+        test_loss += criterion(y_pred, y).data.item()
+        pred = y_pred.data.max(0)[1]  # get the index of the max in the prediction tensor
+
+        # check that the max of the predicted is the same as the label
+        correct += pred.eq(y.data.max(0)[1]).sum()
+
+    test_loss /= X_test.size()[0]
+    print('Test set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)'.format(
+            test_loss, correct, X_test.size()[0],
+            100. * correct / X_test.size()[0]))
 
 
 # =============================================================================
@@ -156,7 +181,14 @@ if __name__ == "__main__":
 
     X_train = Variable(torch.Tensor(X_train))
     y_train = Variable(torch.Tensor(y_train)) 
-    model = train(X_train, y_train, m, n)
+    model, criterion = train(X_train, y_train, m, n)
+
+
+
+
+
+    # extract the test images and labels
+    test(model, criterion, X_test, y_test)
 
     
 
