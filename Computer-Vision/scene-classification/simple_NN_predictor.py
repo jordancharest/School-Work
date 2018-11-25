@@ -55,9 +55,6 @@ def preprocess(img_list, m=0, n=0):
         # resize if applicable
         if m > 0 and n > 0:
             img = cv2.resize(img, (m, n))
-        
-        # normalize
-        # img = (img - 128) / 128
 
         # flatten and add to the dataset
         img = np.ravel(img)
@@ -99,9 +96,9 @@ def get_data(directory, m, n, split=False, scaler=None):
 
     if scaler == None:
         scaler = StandardScaler()
-        X = scaler.fit_transform(X).astype(np.uint8)
+        X = scaler.fit_transform(X)
     else:
-        X = scaler.transform(X).astype(np.uint8)
+        X = scaler.transform(X)
 
     # build label vector
     y = make_label_vectors(len(img_names[0]))
@@ -127,10 +124,11 @@ def get_data(directory, m, n, split=False, scaler=None):
         return X, y
 
 # -----------------------------------------------------------------------------
-def train(X_train, y_train, X_valid, y_valid, m, n, learning_rate=1e-5):
+def train(X_train, y_train, X_valid, y_valid, m, n):
     #  Set parameters to control the process
-    num_epochs = 100
+    num_epochs = 50
     batch_size = 16
+    learning_rate=1e-4
     n_train = X_train.size()[0]
     n_batches = int(np.ceil(n_train / batch_size))
     log_interval = 10
@@ -214,8 +212,8 @@ if __name__ == "__main__":
     training_data, test_data= arg_parse()
 
     # Desired image size
-    m = 24
-    n = 36
+    m = 36
+    n = 54
 
     print("\nGetting training data")
     X_train, y_train, X_valid, y_valid, scaler = get_data(training_data, m , n, split=True, scaler=None)
@@ -226,7 +224,4 @@ if __name__ == "__main__":
     if test_data:
         print("Getting test data")
         X_test, y_test = get_data(test_data, m, n, split=False, scaler=scaler)
-        test(model, criterion, X_test, y_test)
-
-        # extract the test images and labels
         test(model, criterion, X_test, y_test)
