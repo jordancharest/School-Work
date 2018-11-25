@@ -17,7 +17,10 @@ from fully_connected import FullyConnected
 
 # -----------------------------------------------------------------------------
 def arg_parse():
-    if len(argv) == 3:
+    if len(argv) == 2:
+        _, training_data = argv
+        return training_data, None
+    elif len(argv) == 3:
         _, training_data, test_data = argv
         return training_data, test_data
     else:
@@ -166,10 +169,8 @@ def train(X_train, y_train, X_valid, y_valid, m, n, learning_rate=1e-5):
             optimizer.step()
 
         if ep != 0 and ep % log_interval == 0:
-            y_pred = model(X_valid)
-            valid_loss = criterion(y_pred, y_valid)
-            accuracy, correct, incorrect = success_rate(y_pred, y_valid)
-            print("Epoch %d:\nloss: %.5f, accuracy: %.2f" %(ep, valid_loss.item(), accuracy))
+            print("Epoch {}:\n  ".format(ep), end='')
+            test(model, criterion, X_valid, y_valid)
 
     print(round(time.time()-start, 2), "seconds to train\n")
     return model, criterion
@@ -179,16 +180,13 @@ def train(X_train, y_train, X_valid, y_valid, m, n, learning_rate=1e-5):
 def test(model, criterion, X_test, y_test):
     # make predictions
     y_pred = model(X_test)
-    print("Y_pred:", y_pred.size())
-    print("Y_test:", y_test.size())
 
     # sum up batch loss and compute accuracy
-    # y_test = torch.Tensor.long(y_test)
     loss = criterion(y_pred, y_test)
     accuracy, correct, incorrect = success_rate(y_pred, y_test)
 
-    print('Test set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)'.format(
-            loss, correct, X_test.size()[0], accuracy))
+    print('Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)'.format(
+            loss, correct, X_test.size()[0], accuracy * 100.0))
 
 # -----------------------------------------------------------------------------
 def success_rate(pred_Y, Y):
@@ -205,17 +203,15 @@ def success_rate(pred_Y, Y):
     using the Variable objects themselve, but it is easier syntactically to do this
     using the .data Tensors for obscure PyTorch reasons.
     '''
-    print(pred_Y, pred_Y.size())
-    _,pred_Y_index = torch.max(pred_Y, 1)
-    _,Y_index = torch.max(Y,1)
-    num_equal = torch.sum(pred_Y_index.data == Y_index.data).item()
-    num_different = torch.sum(pred_Y_index.data != Y_index.data).item()
+    _,pred_Y_index = torch.max(pred_Y, -1)
+    num_equal = torch.sum(pred_Y_index.data == Y.data).item()
+    num_different = torch.sum(pred_Y_index.data != Y.data).item()
     rate = num_equal / float(num_equal + num_different)
     return rate, num_equal, num_different # rate.item()
 
 # =============================================================================
 if __name__ == "__main__":
-    training_data, test_data = arg_parse()
+    training_data, test_data= arg_parse()
 
     # Desired image size
     m = 24
@@ -227,19 +223,10 @@ if __name__ == "__main__":
 
     model, criterion = train(X_train, y_train, X_valid, y_valid, m, n)
 
-    print("Getting test data")
-    X_test, y_test = get_data(test_data, m, n, split=False, scaler=scaler)
-    test(model, criterion, X_test, y_test)
+    if test_data:
+        print("Getting test data")
+        X_test, y_test = get_data(test_data, m, n, split=False, scaler=scaler)
+        test(model, criterion, X_test, y_test)
 
-
-
-
-
-
-
-    # extract the test images and labels
-    test(model, criterion, X_test, y_test )
-
-    
-
-    # learning
+        # extract the test images and labels
+        test(model, criterion, X_test, y_test)
