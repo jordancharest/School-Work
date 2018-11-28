@@ -1,0 +1,37 @@
+
+Getting training data
+Grass: 800 images
+Ocean: 800 images
+Red carpet: 800 images
+Road: 800 images
+Wheatfield: 800 images
+
+11.0 seconds to extract images and build label tensor
+Total images: 4000
+Flattened image size: 10368
+
+Number of batches: 200
+
+
+Begin Training...
+Epoch 0:
+  Average loss: 0.6899, Accuracy: 607/800 (76%)
+Epoch 1:
+  Average loss: 0.6880, Accuracy: 601/800 (75%)
+Epoch 2:
+  Average loss: 0.6247, Accuracy: 629/800 (79%)
+10.5 seconds to train
+
+Getting test data
+Grass: 200 images
+Ocean: 200 images
+Red carpet: 200 images
+Road: 200 images
+Wheatfield: 200 images
+
+2.42 seconds to extract images and build label tensor
+Total images: 1000
+Flattened image size: 10368
+
+Running through model
+Average loss: 0.6494, Accuracy: 775/1000 (78%)
