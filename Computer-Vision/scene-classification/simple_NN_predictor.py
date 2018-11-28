@@ -126,12 +126,12 @@ def get_data(directory, m, n, split=False, scaler=None):
 # -----------------------------------------------------------------------------
 def train(X_train, y_train, X_valid, y_valid, m, n):
     #  Set parameters to control the process
-    num_epochs = 50
+    num_epochs = 3
     batch_size = 16
     learning_rate=1e-4
     n_train = X_train.size()[0]
     n_batches = int(np.ceil(n_train / batch_size))
-    log_interval = 10
+    log_interval = 1
 
     print("\nNumber of batches:", n_batches)
 
@@ -166,7 +166,7 @@ def train(X_train, y_train, X_valid, y_valid, m, n):
             loss.backward()
             optimizer.step()
 
-        if ep != 0 and ep % log_interval == 0:
+        if ep % log_interval == 0:
             print("Epoch {}:\n  ".format(ep), end='')
             test(model, criterion, X_valid, y_valid)
 
@@ -212,8 +212,8 @@ if __name__ == "__main__":
     training_data, test_data= arg_parse()
 
     # Desired image size
-    m = 36
-    n = 54
+    m = 48
+    n = 72
 
     print("\nGetting training data")
     X_train, y_train, X_valid, y_valid, scaler = get_data(training_data, m , n, split=True, scaler=None)
@@ -224,4 +224,5 @@ if __name__ == "__main__":
     if test_data:
         print("Getting test data")
         X_test, y_test = get_data(test_data, m, n, split=False, scaler=scaler)
+        print("\nRunning through model")
         test(model, criterion, X_test, y_test)
