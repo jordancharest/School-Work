@@ -122,7 +122,7 @@ def get_data(train_dir, test_dir, m, n):
 
 # -----------------------------------------------------------------------------
 def train(train_loader, validation_loader, m, n):
-    num_epochs = 10
+    num_epochs = 15
     learning_rate=1e-4
     log_interval = 1
 
@@ -202,8 +202,8 @@ if __name__ == "__main__":
     training_data, test_data = arg_parse()
     
     # Desired image size
-    m = 48
-    n = 72
+    m = 64
+    n = 128
 
     print("\nGetting data")
     train_loader, validation_loader, test_loader = get_data(training_data, test_data, m, n)
