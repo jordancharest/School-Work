@@ -42,44 +42,6 @@ def get_img_names(root_dir):
 
     return grass, ocean, redcarpet, road, wheatfield
 
-
-# # -----------------------------------------------------------------------------
-# def preprocess(img_list, m=0, n=0):
-#     X = []
-#     y = []
-#     for img_name in img_list:
-#         img = cv2.imread(img_name, cv2.IMREAD_COLOR)
-
-#         # resize if applicable
-#         if m > 0 and n > 0:
-#             img = cv2.resize(img, (m, n))
-
-#         # add to the dataset
-#         X.append(img)
-
-#     return np.array(X), np.array(y)
-
-# # -----------------------------------------------------------------------------
-# def get_data(directory):
-#     img_names = get_img_names(directory)
-
-#     # read and preprocess all images
-#     start = time.time()
-#     X = []
-#     for j, img_set in enumerate(img_names):
-#         X_partial, y_partial = preprocess(img_set, m, n)
-#         X.append(X_partial)
-
-#     # format, shape, and scale
-#     X = np.array(X)
-#     X = X.reshape(X.shape[0] * X.shape[1], X.shape[2])
-
-#     if scaler == None:
-#         scaler = StandardScaler()
-#         X = scaler.fit_transform(X)
-#     else:
-#         X = scaler.transform(X)
-
 # -----------------------------------------------------------------------------
 def get_data(train_dir, test_dir, m, n):
     train_transforms = transforms.Compose([
@@ -166,7 +128,7 @@ def train(train_loader, validation_loader, criterion, m, n):
             for param_group in optimizer.param_groups:
                 param_group["lr"] = learning_rate
 
-    return criterion, best_epoch
+    return best_epoch
 
 # -----------------------------------------------------------------------------
 def test(model, criterion, data_loader):
@@ -238,14 +200,14 @@ if __name__ == "__main__":
     train_loader, validation_loader, test_loader = get_data(training_data, test_data, m, n)
     criterion = nn.CrossEntropyLoss()
 
-    if False:
+    if training_data:
         best_epoch = train(train_loader, validation_loader, criterion, m, n)
         print("Training complete. Best model was at epoch", best_epoch)
 
     if test_data:
         print("\nLoading saved model for the test set")
-        checkpoint = torch.load("cnn_17.model")
-        # checkpoint = torch.load("cnn_{}.model".format(best_epoch))
+        # checkpoint = torch.load("cnn2_30.model")
+        checkpoint = torch.load("cnn_{}.model".format(best_epoch))
         model = Convolutional(m,n)
         model.load_state_dict(checkpoint)
         model.eval()
