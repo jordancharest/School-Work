@@ -1,4 +1,5 @@
 from sys import argv
+import time
 
 import torch
 import torch.nn as nn
@@ -121,18 +122,20 @@ def get_data(train_dir, test_dir, m, n):
     return train_loader, validation_loader, test_loader
 
 # -----------------------------------------------------------------------------
-def train(train_loader, validation_loader, m, n):
-    num_epochs = 15
-    learning_rate=1e-4
+def train(train_loader, validation_loader, criterion, m, n):
+    num_epochs = 40
+    learning_rate = 1e-4
     log_interval = 1
+    best_accuracy = 0.80
+    best_epoch = 0
 
     # model definition
     model = Convolutional(m, n)    
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    criterion = nn.CrossEntropyLoss()
 
     # Training
-    for epoch in range(num_epochs):       
+    for epoch in range(num_epochs):
+        start = time.time()     
         for step, (x, y) in enumerate(train_loader):
             batch_X = Variable(x)   # batch x (image)
             batch_y = Variable(y)   # batch y (target)
@@ -146,17 +149,31 @@ def train(train_loader, validation_loader, m, n):
             loss.backward()                 
             optimizer.step()
 
+        # log validation results and save if the results are good
         if epoch % log_interval == 0:
             print("Epoch {}:\n  ".format(epoch), end='')
-            test(model, criterion, validation_loader)
+            print(round(time.time()-start, 2), "seconds to train\n  ", end='')
+            accuracy = test(model, criterion, validation_loader)
+            if accuracy > best_accuracy:
+                best_accuracy = accuracy
+                best_epoch = epoch
+                save_model(model, epoch)
 
-    return model, criterion
+        # reduce the learning rate periodically
+        if epoch == 5 or epoch == 15 or epoch == 25:
+            print("Adjusting learning rate")
+            learning_rate *= 0.5
+            for param_group in optimizer.param_groups:
+                param_group["lr"] = learning_rate
+
+    return criterion, best_epoch
 
 # -----------------------------------------------------------------------------
 def test(model, criterion, data_loader):
     total_acc = 0.0
     total_correct = 0
     total_incorrect = 0
+    total_loss = 0.0
   
     for step, (x, y) in enumerate(data_loader):
         batch_X = Variable(x)   # batch x (image)
@@ -165,14 +182,21 @@ def test(model, criterion, data_loader):
         # run batch through model
         y_pred = model(batch_X)
         loss = criterion(y_pred, batch_y)
+        total_loss += loss
 
         acc, correct, incorrect = success_rate(y_pred, batch_y)
         total_acc += acc
         total_correct += correct
         total_incorrect += incorrect
 
+    step += 1
+
     accuracy = total_acc / step
-    print("Validation accuracy:", accuracy)
+    print('Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)'.format(
+            total_loss/step, total_correct, total_correct+total_incorrect,
+            accuracy * 100.0))
+
+    return accuracy
 
 
 # -----------------------------------------------------------------------------
@@ -196,6 +220,11 @@ def success_rate(pred_Y, Y):
     rate = num_equal / float(num_equal + num_different)
     return rate, num_equal, num_different # rate.item()
 
+# -----------------------------------------------------------------------------
+def save_model(model, epoch):
+    torch.save(model.state_dict(), "cnn_{}.model".format(epoch))
+    print("Checkpoint saved")
+
 
 # =============================================================================
 if __name__ == "__main__":
@@ -207,11 +236,20 @@ if __name__ == "__main__":
 
     print("\nGetting data")
     train_loader, validation_loader, test_loader = get_data(training_data, test_data, m, n)
-    print(train_loader)
-    print(validation_loader)
-    print(test_loader)
-    model, criterion = train(train_loader, validation_loader, m, n)
-    # X_train, y_train, X_valid, y_valid, scaler = get_data(training_data, m , n, split=True, scaler=None)
+    criterion = nn.CrossEntropyLoss()
 
+    if False:
+        best_epoch = train(train_loader, validation_loader, criterion, m, n)
+        print("Training complete. Best model was at epoch", best_epoch)
 
-
+    if test_data:
+        print("\nLoading saved model for the test set")
+        checkpoint = torch.load("cnn_17.model")
+        # checkpoint = torch.load("cnn_{}.model".format(best_epoch))
+        model = Convolutional(m,n)
+        model.load_state_dict(checkpoint)
+        model.eval()
+        print("Testing...")
+        start = time.time()
+        test(model, criterion, test_loader)
+        print(round(time.time()-start, 2), "seconds to test\n  ", end='')
