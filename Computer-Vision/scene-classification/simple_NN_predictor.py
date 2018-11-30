@@ -209,7 +209,7 @@ def success_rate(pred_Y, Y):
 
 # =============================================================================
 if __name__ == "__main__":
-    training_data, test_data= arg_parse()
+    training_data, test_data = arg_parse()
 
     # Desired image size
     m = 48
