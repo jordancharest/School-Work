@@ -2,6 +2,7 @@ from sys import argv
 import glob
 import time
 
+from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import LabelBinarizer
@@ -11,6 +12,7 @@ import torch.nn as nn
 import torch
 import cv2
 import numpy as np
+import matplotlib.pyplot as plt
 
 from fully_connected import FullyConnected
 
@@ -186,6 +188,8 @@ def test(model, criterion, X_test, y_test):
     print('Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)'.format(
             loss, correct, X_test.size()[0], accuracy * 100.0))
 
+    return y_pred
+
 # -----------------------------------------------------------------------------
 def success_rate(pred_Y, Y):
     '''
@@ -207,9 +211,46 @@ def success_rate(pred_Y, Y):
     rate = num_equal / float(num_equal + num_different)
     return rate, num_equal, num_different # rate.item()
 
+# -----------------------------------------------------------------------------
+def plot_confusion_matrix(cm, classes,
+                          normalize=False,
+                          title='Confusion matrix',
+                          cmap=plt.cm.Blues):
+    """
+    This function prints and plots the confusion matrix.
+    Normalization can be applied by setting `normalize=True`.
+    """
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        print("Normalized confusion matrix")
+    else:
+        print('Confusion matrix, without normalization')
+
+    print(cm)
+
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes, rotation=45)
+    plt.yticks(tick_marks, classes)
+
+    fmt = '.2f' if normalize else 'd'
+    thresh = cm.max() / 2.
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        plt.text(j, i, format(cm[i, j], fmt),
+                 horizontalalignment="center",
+                 color="white" if cm[i, j] > thresh else "black")
+
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    plt.tight_layout()
+    plt.savefig("fc_confusion_matrix.png")
+
 # =============================================================================
 if __name__ == "__main__":
     training_data, test_data = arg_parse()
+    names = ["grass", "ocean", "redcarpet", "road", "wheatfield"]
 
     # Desired image size
     m = 48
@@ -225,4 +266,10 @@ if __name__ == "__main__":
         print("Getting test data")
         X_test, y_test = get_data(test_data, m, n, split=False, scaler=scaler)
         print("\nRunning through model")
-        test(model, criterion, X_test, y_test)
+        y_pred_one_hot = test(model, criterion, X_test, y_test)
+        _, y_pred = torch.max(y_pred_one_hot, -1)
+        np.save("fc_y_pred", y_pred)
+
+        cm = confusion_matrix(y_test, y_pred.numpy())
+        # print(cm)
+        plot_confusion_matrix(cm, names)

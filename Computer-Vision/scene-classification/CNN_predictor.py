@@ -7,6 +7,10 @@ import torch.optim as optim
 import torch.utils.data as data
 import torchvision
 
+import matplotlib.pyplot as plt
+import numpy as np
+from sklearn.metrics import confusion_matrix
+
 from torch.autograd import Variable
 from torchvision import transforms
 from convolutional import Convolutional
@@ -72,7 +76,7 @@ def get_data(train_dir, test_dir, m, n):
 
     # extract test data
     test_data = torchvision.datasets.ImageFolder(root=test_dir, transform=test_transforms)
-    test_loader  = data.DataLoader(test_data, batch_size=batch_size, shuffle=True, num_workers=4)
+    test_loader  = data.DataLoader(test_data, batch_size=1000, shuffle=False, num_workers=4)
 
     print("Training images:", len(train_loader.dataset))
     print("Validation images:", len(validation_loader.dataset))
@@ -115,7 +119,7 @@ def train(train_loader, validation_loader, criterion, m, n):
         if epoch % log_interval == 0:
             print("Epoch {}:\n  ".format(epoch), end='')
             print(round(time.time()-start, 2), "seconds to train\n  ", end='')
-            accuracy = test(model, criterion, validation_loader)
+            accuracy, _ = test(model, criterion, validation_loader)
             if accuracy > best_accuracy:
                 best_accuracy = accuracy
                 best_epoch = epoch
@@ -158,7 +162,7 @@ def test(model, criterion, data_loader):
             total_loss/step, total_correct, total_correct+total_incorrect,
             accuracy * 100.0))
 
-    return accuracy
+    return accuracy, y_pred
 
 
 # -----------------------------------------------------------------------------
@@ -187,11 +191,48 @@ def save_model(model, epoch):
     torch.save(model.state_dict(), "cnn_{}.model".format(epoch))
     print("Checkpoint saved")
 
+# -----------------------------------------------------------------------------
+def plot_confusion_matrix(cm, classes,
+                          normalize=False,
+                          title='Confusion matrix',
+                          cmap=plt.cm.Blues):
+    """
+    This function prints and plots the confusion matrix.
+    Normalization can be applied by setting `normalize=True`.
+    """
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        print("Normalized confusion matrix")
+    else:
+        print('Confusion matrix, without normalization')
+
+    print(cm)
+
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes, rotation=45)
+    plt.yticks(tick_marks, classes)
+
+    fmt = '.2f' if normalize else 'd'
+    thresh = cm.max() / 2.
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        plt.text(j, i, format(cm[i, j], fmt),
+                 horizontalalignment="center",
+                 color="white" if cm[i, j] > thresh else "black")
+
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    plt.tight_layout()
+    plt.savefig("cnn_confusion_matrix.png")
+
 
 # =============================================================================
 if __name__ == "__main__":
     training_data, test_data = arg_parse()
-    
+    names = ["grass", "ocean", "redcarpet", "road", "wheatfield"]
+
     # Desired image size
     m = 64
     n = 128
@@ -200,18 +241,32 @@ if __name__ == "__main__":
     train_loader, validation_loader, test_loader = get_data(training_data, test_data, m, n)
     criterion = nn.CrossEntropyLoss()
 
-    if training_data:
+    if False:
         best_epoch = train(train_loader, validation_loader, criterion, m, n)
         print("Training complete. Best model was at epoch", best_epoch)
 
     if test_data:
         print("\nLoading saved model for the test set")
-        # checkpoint = torch.load("cnn2_30.model")
-        checkpoint = torch.load("cnn_{}.model".format(best_epoch))
+        checkpoint = torch.load("cnn_17.model")
+        # checkpoint = torch.load("cnn_{}.model".format(best_epoch))
         model = Convolutional(m,n)
         model.load_state_dict(checkpoint)
         model.eval()
         print("Testing...")
         start = time.time()
-        test(model, criterion, test_loader)
+        _, y_pred_one_hot = test(model, criterion, test_loader)
         print(round(time.time()-start, 2), "seconds to test\n  ", end='')
+
+        # build label vector
+        grass = np.zeros(200)
+        ocean = np.ones(200)
+        redcarpet = 2 * np.ones(200)
+        road = 3 * np.ones(200)
+        wheatfield = 4 * np.ones(200)
+
+        y_test = np.hstack((grass, ocean, redcarpet, road, wheatfield))
+        _, y_pred = torch.max(y_pred_one_hot, -1)
+        cm = confusion_matrix(y_test, y_pred.numpy())
+        np.save("cnn_y_pred", y_pred)
+        # print(cm)
+        plot_confusion_matrix(cm, names)
