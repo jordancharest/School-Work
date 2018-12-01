@@ -85,7 +85,7 @@ def train(X_train, y_train, X_test, y_test):
     print(class_weight)
     # class_weight='balanced'
     # classifier = SVC(kernel='rbf', C = 0.001, gamma=0.01)
-    classifier = LinearSVC(C=0.001, class_weight=class_weight)
+    classifier = LinearSVC(C=0.001, class_weight=class_weight, max_iter=25)
     t=time.time()
     classifier.fit(X_train, y_train)
     y_pred = classifier.predict(X_test)
@@ -179,5 +179,5 @@ if __name__ == "__main__":
         cm = confusion_matrix(y_test, y_pred)
         print("\nConfusion Matrix:")
         print(cm)
-        plot_confusion_matrix(cm,classes=names)
+        # plot_confusion_matrix(cm,classes=names)
 
