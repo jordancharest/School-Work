@@ -3,16 +3,16 @@ from sys import argv
 import cv2
 import numpy as np
 
-# TODO:
-# Keep a color version to draw on but compute optical flow on grayscale
+point_motion_threshold = 5
+camera_motion_threshold = 0.9
 
 
 # -----------------------------------------------------------------------------
 def arg_parse():
     if len(argv) == 3:
         script, img_name0, img_name1 = argv
-        img0 = cv2.imread(img_name0, cv2.IMREAD_GRAYSCALE)
-        img1 = cv2.imread(img_name1, cv2.IMREAD_GRAYSCALE)
+        img0 = cv2.imread(img_name0, cv2.IMREAD_COLOR)
+        img1 = cv2.imread(img_name1, cv2.IMREAD_COLOR)
         return img0, img1
 
     else:
@@ -22,18 +22,20 @@ def arg_parse():
 
 # -----------------------------------------------------------------------------
 def optical_flow(img0, img1, feature_params, lk_params):
+    gray0 = cv2.cvtColor(img0, cv2.COLOR_BGR2GRAY)
+    gray1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
+
     # Create some random colors
     colors = np.random.randint(0,255,(100,3))
-    points0 = cv2.goodFeaturesToTrack(img0, mask=None, **feature_params)
-    points1, status, err = cv2.calcOpticalFlowPyrLK(img0, img1, points0, None, **lk_params)
+    points0 = cv2.goodFeaturesToTrack(gray0, mask=None, **feature_params)
+    points1, status, err = cv2.calcOpticalFlowPyrLK(gray0, gray1, points0, None, **lk_params)
+
+    print("Points:\n", points1)
+    print("Status:", status)
+    print("Error:", err)
 
     # Create a mask image for drawing purposes
     mask = np.zeros_like(img1)
-
-
-    # print("Points:\n", points1)
-    # print("Status:\n", status)
-    # print("Error:\n", err)
 
     # Select good points
     good0 = points0[status == 1]
@@ -48,8 +50,19 @@ def optical_flow(img0, img1, feature_params, lk_params):
     result = img1 + mask
     cv2.imwrite("result.png", result)
 
-    # print()
+    points_that_moved = np.sum(status[err > point_motion_threshold])
+    print("Points that moved:", points_that_moved)
+    print("Total matched points:", len(good0))
+    if (points_that_moved / len(good0)) > camera_motion_threshold:
+        print("Camera is moving")
+        return True, good0, good1
+    else:
+        print("Camera is stationary")
+        return False, good0, good1
 
+# -----------------------------------------------------------------------------
+def estimate_focus_of_expansion(points0, points1):
+    print("RANSAC'n")
 
 # =============================================================================
 if __name__ == "__main__":
@@ -65,4 +78,6 @@ if __name__ == "__main__":
                       maxLevel = 2,
                       criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
 
-    optical_flow(img0, img1, feature_params, lk_params)
+    camera_is_moving, points0, points1 = optical_flow(img0, img1, feature_params, lk_params)
+    if camera_is_moving:
+        estimate_focus_of_expansion(points0, points1)
