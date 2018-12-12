@@ -6,7 +6,7 @@ import numpy as np
 
 pt_motion_threshold = 5
 camera_motion_threshold = 0.8
-flow_dist_scale = 5
+flow_dist_scale = 2
 
 
 # -----------------------------------------------------------------------------
@@ -61,17 +61,17 @@ def optical_flow(img0, img1, feature_params, lk_params):
     pts_that_moved = np.sum(status[err > pt_motion_threshold])
     print("Points that moved more than threshold ({0} pixels): {1}"\
         .format(pt_motion_threshold, pts_that_moved))
-    motion_ratio = pts_that_moved / total_pts * 100
-    print("Ratio: {0}/{1} = {2:.2f}%".format(pts_that_moved, total_pts, motion_ratio))
+    motion_ratio = pts_that_moved / total_pts
+    print("Ratio: {0}/{1} = {2:.2f}%".format(pts_that_moved, total_pts, motion_ratio*100))
     if motion_ratio > camera_motion_threshold:
         print("Camera is moving. > {}% of points moved".format(camera_motion_threshold * 100))
-        return True, good0, good1, err, result
+        return True, good0, good1, err[status == 1], result
     else:
         print("Camera is stationary. <= {}% of points moved".format(camera_motion_threshold * 100))
-        return False, good0, good1, err, result
+        return False, good0, good1, err[status == 1], result
 
 # -----------------------------------------------------------------------------
-def FoE_RANSAC(pts0, pts1, flow_dist, samples=50, tau=0.9):
+def FoE_RANSAC(pts0, pts1, flow_dist, samples=50, tau=1.0):
     print("\nStarting RANSAC to estimate Focus of Expansion")
     k_max = 0
     best_i, best_j = 0,1
@@ -116,12 +116,18 @@ def FoE_RANSAC(pts0, pts1, flow_dist, samples=50, tau=0.9):
     outlier_error = distances[error >= tau**2]
 
     # separate out the outlier points to later cluster them
-    independent_pt0 = pts0[error >= tau**2]
-    independent_pt1 = pts1[error >= tau**2]
+    # objects are considered to be independently moving if they are RANSAC outliers
+    # and they have a motion vector greater than the motion threshold
+    independent_pt0 = pts0[(error >= tau**2) & (flow_dist > pt_motion_threshold)]
+    independent_pt1 = pts1[(error >= tau**2) & (flow_dist > pt_motion_threshold)]
     moving_independently = np.hstack((independent_pt0, independent_pt1))
-    slope = np.abs(moving_independently[:,1] - moving_independently[:,3] / moving_independently[:,0] - moving_independently[:,2])
+    slope = (moving_independently[:,1] - moving_independently[:,3]) /  \
+            (moving_independently[:,0] - moving_independently[:,2])
     slope = np.expand_dims(slope, axis=1)
-    flow_dist = flow_dist[error >= tau**2] * flow_dist_scale
+    flow_dist = flow_dist[(error >= tau**2) & (flow_dist > pt_motion_threshold)] * flow_dist_scale
+    if len(flow_dist.shape) == 1:
+        flow_dist = np.expand_dims(flow_dist, axis=1)
+
     moving_independently = np.hstack((moving_independently, slope, flow_dist))
 
     print("RANSAC results:")
@@ -212,6 +218,19 @@ if __name__ == "__main__":
         FoE_x, FoE_y, independent = FoE_RANSAC(pts0, pts1, flow_dist)
         img = cv2.circle(img, (FoE_x, FoE_y), radius=10, color=(0,0,255), thickness=-1)
         img = cv2.circle(img, (FoE_x, FoE_y), radius=5, color=(255,255,255), thickness=2)
+
+    # if not, build the feature vector for affinity propagation using all points
+    else:
+        ind_pt0 = pts0[flow_dist > pt_motion_threshold]
+        ind_pt1 = pts1[flow_dist > pt_motion_threshold]
+        independent = np.hstack((ind_pt0, ind_pt1))
+        slope = (independent[:,1] - independent[:,3]) / \
+                (independent[:,0] - independent[:,2])
+        slope = np.expand_dims(slope, axis=1)
+        flow_dist = flow_dist[flow_dist > pt_motion_threshold] * flow_dist_scale
+        if len(flow_dist.shape) == 1:
+            flow_dist = np.expand_dims(flow_dist, axis=1)
+    
     cv2.imwrite("optical_flow" + app + ".png", img)
 
     # draw bounding boxes around independently moving objects
